@@ -155,6 +155,8 @@ struct PrintLayout {
     show_recovery_dialog: bool,
     // Thumbnail cache for performance
     thumbnail_cache: HashMap<PathBuf, iced::widget::image::Handle>,
+    // Cached string for zoom percentage display
+    zoom_text: String,
 }
 
 impl PrintLayout {
@@ -201,6 +203,9 @@ impl PrintLayout {
         
         // Get copies from last print, default to 1
         let print_copies = last_print.copies.unwrap_or(1);
+        
+        // Pre-compute zoom text for display
+        let zoom_text = format!("{:.0}%", preferences.zoom_level * 100.0);
 
         let instance = PrintLayout {
             layout,
@@ -236,6 +241,7 @@ impl PrintLayout {
             show_recent_files_menu: false,
             show_recovery_dialog: false,
             thumbnail_cache: HashMap::new(),
+            zoom_text,
         };
         
         let mut tasks = vec![
@@ -304,11 +310,13 @@ impl PrintLayout {
                                 let dy = y - self.drag_start_pos.1;
                                 let new_x = self.drag_image_initial_pos.0 + dx;
                                 let new_y = self.drag_image_initial_pos.1 + dy;
+                                // Update layout directly
                                 if let Some(image) = self.layout.get_image_mut(&id) {
                                     image.x_mm = new_x;
                                     image.y_mm = new_y;
-                                    self.canvas.set_layout(self.layout.clone());
                                 }
+                                // Use optimized method that updates canvas position directly
+                                self.canvas.update_image_position(&id, new_x, new_y);
                             }
                         }
                         DragMode::Resize(handle) => {
@@ -412,8 +420,9 @@ impl PrintLayout {
                                     // Update input fields live
                                     self.image_width_input = format!("{:.1}", new_w);
                                     self.image_height_input = format!("{:.1}", new_h);
-                                    self.canvas.set_layout(self.layout.clone());
                                 }
+                                // Use optimized method that updates canvas bounds directly
+                                self.canvas.update_image_bounds(&id, new_x, new_y, new_w, new_h);
                             }
                         }
                         DragMode::None => {}
@@ -476,9 +485,10 @@ impl PrintLayout {
             }
             Message::DeleteImageClicked => {
                 if let Some(id) = &self.layout.selected_image_id.clone() {
-                    // Remove from thumbnail cache
+                    // Remove from thumbnail cache and source cache
                     if let Some(img) = self.layout.get_image(id) {
                         self.thumbnail_cache.remove(&img.path);
+                        self.canvas.remove_from_source_cache(&img.path);
                     }
                     self.layout.remove_image(id);
                     self.canvas.set_layout(self.layout.clone());
@@ -535,19 +545,23 @@ impl PrintLayout {
             }
             Message::ZoomIn => {
                 self.zoom = (self.zoom * 1.2).min(5.0);
+                self.zoom_text = format!("{:.0}%", self.zoom * 100.0);
                 self.canvas.set_zoom(self.zoom);
             }
             Message::ZoomOut => {
                 self.zoom = (self.zoom / 1.2).max(0.1);
+                self.zoom_text = format!("{:.0}%", self.zoom * 100.0);
                 self.canvas.set_zoom(self.zoom);
             }
             Message::ZoomReset => {
                 self.zoom = 1.0;
+                self.zoom_text = "100%".to_string();
                 self.canvas.set_zoom(self.zoom);
             }
             Message::ZoomToFit => {
                 // Fit the page to the canvas (simplified implementation)
                 self.zoom = 0.5;
+                self.zoom_text = "50%".to_string();
                 self.canvas.set_zoom(self.zoom);
             }
             // New settings handlers
@@ -1077,7 +1091,7 @@ impl PrintLayout {
             delete_button,
             Space::with_width(Length::Fixed(20.0)),
             button(text("−").size(18)).on_press(Message::ZoomOut),
-            text(format!("{:.0}%", self.zoom * 100.0)).size(14),
+            text(&self.zoom_text).size(14),
             button(text("+").size(18)).on_press(Message::ZoomIn),
             button(text("Fit").size(12)).on_press(Message::ZoomToFit),
             button(text("100%").size(12)).on_press(Message::ZoomReset),

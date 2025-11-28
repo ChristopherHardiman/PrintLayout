@@ -45,22 +45,20 @@ impl ImageCache {
     }
 
     /// Get or create a transformed image handle for the given placed image
-    pub fn get_transformed_handle(&mut self, img: &PlacedImage) -> Option<iced::widget::image::Handle> {
+    /// Uses source_cache to avoid reloading images from disk
+    pub fn get_transformed_handle(
+        &mut self, 
+        img: &PlacedImage, 
+        source_cache: &mut SourceImageCache
+    ) -> Option<iced::widget::image::Handle> {
         let key = TransformKey::from_placed_image(img);
         
         if let Some(handle) = self.cache.get(&key) {
             return Some(handle.clone());
         }
 
-        if !img.path.exists() {
-            return None;
-        }
-
-        // Load and transform the image
-        let source = match image::open(&img.path) {
-            Ok(img) => img,
-            Err(_) => return None,
-        };
+        // Get source image from cache (or load it)
+        let source = source_cache.get_or_load(&img.path)?;
 
         // Apply rotation (90° increments)
         let rotation_normalized = ((img.rotation_degrees % 360.0) + 360.0) % 360.0;
@@ -71,7 +69,7 @@ impl ImageCache {
         } else if rotation_normalized >= 265.0 && rotation_normalized <= 275.0 {
             source.rotate270()
         } else {
-            source
+            source.clone()
         };
 
         // Apply flips
@@ -140,6 +138,44 @@ pub enum ResizeHandle {
     Right,
 }
 
+/// Cache for source images loaded from disk (to avoid repeated disk I/O)
+#[derive(Debug, Default)]
+pub struct SourceImageCache {
+    cache: HashMap<PathBuf, image::DynamicImage>,
+}
+
+impl SourceImageCache {
+    pub fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Get or load a source image from disk
+    pub fn get_or_load(&mut self, path: &PathBuf) -> Option<&image::DynamicImage> {
+        if !self.cache.contains_key(path) {
+            if path.exists() {
+                if let Ok(img) = image::open(path) {
+                    self.cache.insert(path.clone(), img);
+                }
+            }
+        }
+        self.cache.get(path)
+    }
+
+    /// Remove an image from cache
+    #[allow(dead_code)]
+    pub fn remove(&mut self, path: &PathBuf) {
+        self.cache.remove(path);
+    }
+
+    /// Clear the entire cache
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
+}
+
 /// The canvas widget for displaying and interacting with the layout
 pub struct LayoutCanvas {
     layout: Layout,
@@ -147,6 +183,8 @@ pub struct LayoutCanvas {
     cache: Cache,
     // Use RefCell for interior mutability to allow caching in draw()
     image_cache: RefCell<ImageCache>,
+    // Cache for source images loaded from disk
+    source_cache: RefCell<SourceImageCache>,
 }
 
 impl LayoutCanvas {
@@ -156,12 +194,48 @@ impl LayoutCanvas {
             zoom: 1.0,
             cache: Cache::new(),
             image_cache: RefCell::new(ImageCache::new()),
+            source_cache: RefCell::new(SourceImageCache::new()),
         }
     }
 
     pub fn set_layout(&mut self, layout: Layout) {
         self.layout = layout;
         self.cache.clear();
+    }
+
+    /// Update layout without clearing the render cache - for position/size changes during drag
+    /// This is more efficient for interactive operations where only positions change
+    #[allow(dead_code)]
+    pub fn update_layout_positions(&mut self, layout: Layout) {
+        self.layout = layout;
+        // Don't clear cache - positions are handled differently
+        // The cache will be invalidated naturally when needed
+        self.cache.clear(); // Still need to clear for now since positions affect rendering
+    }
+
+    /// Update just the selected image's position without full layout update
+    pub fn update_image_position(&mut self, id: &str, x: f32, y: f32) {
+        if let Some(img) = self.layout.images.iter_mut().find(|i| i.id == id) {
+            img.x_mm = x;
+            img.y_mm = y;
+        }
+        self.cache.clear();
+    }
+
+    /// Update just the selected image's size without full layout update  
+    pub fn update_image_bounds(&mut self, id: &str, x: f32, y: f32, w: f32, h: f32) {
+        if let Some(img) = self.layout.images.iter_mut().find(|i| i.id == id) {
+            img.x_mm = x;
+            img.y_mm = y;
+            img.width_mm = w;
+            img.height_mm = h;
+        }
+        self.cache.clear();
+    }
+
+    /// Remove an image from source cache when deleted
+    pub fn remove_from_source_cache(&mut self, path: &PathBuf) {
+        self.source_cache.borrow_mut().remove(path);
     }
 
     #[allow(dead_code)]
@@ -221,8 +295,9 @@ impl LayoutCanvas {
                 .with_color(Color::from_rgb(0.7, 0.7, 0.7)),
         );
 
-        // Get mutable access to image cache via RefCell
+        // Get mutable access to caches via RefCell
         let mut image_cache = self.image_cache.borrow_mut();
+        let mut source_cache = self.source_cache.borrow_mut();
 
         // Draw images
         for img in &self.layout.images {
@@ -234,7 +309,7 @@ impl LayoutCanvas {
             let bounds = Rectangle::new(Point::new(x, y), Size::new(width, height));
 
             // Try to draw transformed image using Iced 0.13's draw_image
-            if let Some(handle) = image_cache.get_transformed_handle(img) {
+            if let Some(handle) = image_cache.get_transformed_handle(img, &mut source_cache) {
                 let image = Image::new(handle);
                 frame.draw_image(bounds, image);
             } else {
