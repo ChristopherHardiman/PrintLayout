@@ -6,9 +6,11 @@ use std::path::PathBuf;
 
 mod canvas_widget;
 mod layout;
+mod printing;
 
 use canvas_widget::{CanvasMessage, LayoutCanvas};
 use layout::{Layout, PaperSize, PlacedImage};
+use printing::{discover_printers, execute_print_job, Orientation, PrintJob, PrinterInfo};
 
 pub fn main() -> iced::Result {
     env_logger::init();
@@ -38,6 +40,11 @@ pub enum Message {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    // Printing messages
+    PrintersDiscovered(Vec<PrinterInfo>),
+    PrinterSelected(String),
+    PrintClicked,
+    PrintJobCompleted(Result<String, String>),
 }
 
 struct PrintLayout {
@@ -52,6 +59,11 @@ struct PrintLayout {
     dragging: bool,
     drag_start_pos: (f32, f32),         // Initial click position in mm
     drag_image_initial_pos: (f32, f32), // Initial image position in mm
+    // Printing state
+    printers: Vec<PrinterInfo>,
+    selected_printer: Option<String>,
+    print_copies: u32,
+    print_dpi: u32,
 }
 
 impl Application for PrintLayout {
@@ -78,8 +90,21 @@ impl Application for PrintLayout {
                 dragging: false,
                 drag_start_pos: (0.0, 0.0),
                 drag_image_initial_pos: (0.0, 0.0),
+                printers: Vec::new(),
+                selected_printer: None,
+                print_copies: 1,
+                print_dpi: 300,
             },
-            Command::none(),
+            // Discover printers on startup
+            Command::perform(
+                async {
+                    discover_printers().unwrap_or_else(|e| {
+                        log::error!("Failed to discover printers: {}", e);
+                        Vec::new()
+                    })
+                },
+                Message::PrintersDiscovered,
+            ),
         )
     }
 
@@ -264,6 +289,74 @@ impl Application for PrintLayout {
                 self.canvas.set_zoom(self.zoom);
                 log::info!("Zoom reset: 100%");
             }
+            Message::PrintersDiscovered(printers) => {
+                log::info!("Discovered {} printers", printers.len());
+                self.printers = printers;
+                // Select default printer if available
+                if let Some(default_printer) = self.printers.iter().find(|p| p.is_default) {
+                    self.selected_printer = Some(default_printer.name.clone());
+                    log::info!("Selected default printer: {}", default_printer.name);
+                } else if let Some(first_printer) = self.printers.first() {
+                    self.selected_printer = Some(first_printer.name.clone());
+                    log::info!("Selected first printer: {}", first_printer.name);
+                }
+            }
+            Message::PrinterSelected(printer_name) => {
+                log::info!("Printer selected: {}", printer_name);
+                self.selected_printer = Some(printer_name);
+            }
+            Message::PrintClicked => {
+                log::info!("Print button clicked");
+
+                // Validate layout has images
+                if self.layout.images.is_empty() {
+                    log::warn!("Cannot print: no images on layout");
+                    // TODO: Show error notification
+                    return Command::none();
+                }
+
+                // Validate printer is selected
+                let printer_name = match &self.selected_printer {
+                    Some(name) => name.clone(),
+                    None => {
+                        log::warn!("Cannot print: no printer selected");
+                        // TODO: Show error notification
+                        return Command::none();
+                    }
+                };
+
+                // Create print job
+                let job = PrintJob {
+                    layout: self.layout.clone(),
+                    printer_name,
+                    copies: self.print_copies,
+                    dpi: self.print_dpi,
+                    orientation: Orientation::Portrait,
+                };
+
+                // Execute print job in background
+                return Command::perform(
+                    async move {
+                        match execute_print_job(job) {
+                            Ok(job_id) => Ok(job_id),
+                            Err(e) => Err(e.to_string()),
+                        }
+                    },
+                    Message::PrintJobCompleted,
+                );
+            }
+            Message::PrintJobCompleted(result) => {
+                match result {
+                    Ok(job_id) => {
+                        log::info!("Print job submitted successfully: {}", job_id);
+                        // TODO: Show success notification
+                    }
+                    Err(error) => {
+                        log::error!("Print job failed: {}", error);
+                        // TODO: Show error notification
+                    }
+                }
+            }
         }
 
         Command::none()
@@ -281,7 +374,7 @@ impl Application for PrintLayout {
         ];
 
         // Left panel - Page Settings
-        let page_settings = column![
+        let mut page_settings_column = column![
             text("Page Settings").size(16),
             text("Paper Size:").size(12),
             pick_list(
@@ -319,9 +412,23 @@ impl Application for PrintLayout {
             ]
             .spacing(5),
         ]
-        .spacing(10)
-        .padding(10)
-        .width(Length::Fixed(200.0));
+        .spacing(10);
+
+        // Add printer selection if printers are available
+        if !self.printers.is_empty() {
+            page_settings_column = page_settings_column.push(text("Printer:").size(12));
+
+            let printer_names: Vec<String> = self.printers.iter().map(|p| p.name.clone()).collect();
+            let selected_printer_name = self.selected_printer.clone();
+
+            page_settings_column = page_settings_column.push(pick_list(
+                printer_names,
+                selected_printer_name,
+                Message::PrinterSelected,
+            ));
+        }
+
+        let page_settings = page_settings_column.padding(10).width(Length::Fixed(200.0));
 
         // Toolbar
         let delete_button = if self.layout.selected_image_id.is_some() {
@@ -330,9 +437,17 @@ impl Application for PrintLayout {
             button("Delete Image")
         };
 
+        // Print button - only enabled if printer is selected and images exist
+        let print_button = if self.selected_printer.is_some() && !self.layout.images.is_empty() {
+            button("Print").on_press(Message::PrintClicked)
+        } else {
+            button("Print")
+        };
+
         let toolbar = row![
             button("Add Image").on_press(Message::AddImageClicked),
             delete_button,
+            print_button,
             button("Zoom In").on_press(Message::ZoomIn),
             button("Zoom Out").on_press(Message::ZoomOut),
             button("100%").on_press(Message::ZoomReset),
@@ -354,10 +469,19 @@ impl Application for PrintLayout {
         let content_with_sidebar = row![page_settings, main_area].spacing(0);
 
         // Status bar
+        let printer_status = if let Some(printer_name) = &self.selected_printer {
+            format!("Printer: {}", printer_name)
+        } else if self.printers.is_empty() {
+            "No printers found".to_string()
+        } else {
+            "No printer selected".to_string()
+        };
+
         let status = row![
             text(format!("Images: {}", self.layout.images.len())),
             text(format!("Zoom: {:.0}%", self.zoom * 100.0)),
             text(format!("Paper: {:?}", self.layout.page.paper_size)),
+            text(printer_status),
             text(format!("Version {}", VERSION)),
         ]
         .spacing(20)

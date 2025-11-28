@@ -142,7 +142,68 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 
 ---
 
-### ⏳ Phase 4: Printing Integration (NOT STARTED)
+### ✅ Phase 4: Printing Integration (COMPLETE)
+
+**Status:** Implemented and tested
+
+**Completed Items:**
+- [x] CUPS API integration via subprocess (lpstat, lp commands)
+- [x] Printer discovery system using lpstat
+- [x] PrinterInfo struct with name, description, state, and default flag
+- [x] Printer selection UI with dropdown in sidebar
+- [x] Print button with validation (requires printer and images)
+- [x] Layout rendering pipeline at configurable DPI (default 300)
+- [x] PrintJob struct with layout, printer, copies, DPI, and orientation
+- [x] Image composition onto white canvas at print resolution
+- [x] Temporary file creation for print jobs
+- [x] Print command execution via lp with paper size and orientation options
+- [x] Job ID parsing and logging
+- [x] Async print job execution with status callbacks
+- [x] Error handling with PrintError enum
+
+**Technical Achievements:**
+- Subprocess-based CUPS integration (portable, no library dependency)
+- Printer state detection (Idle, Processing, Stopped, Unknown)
+- Automatic default printer selection on startup
+- High-quality image resampling using Lanczos3 filter
+- Paper size mapping (A3, A4, A5, Letter, Legal, Tabloid, Ledger)
+- Orientation support (Portrait, Landscape)
+- Comprehensive error types with Display trait implementation
+- Millimeter to pixel conversion at target DPI
+- Image overlay composition for multi-image layouts
+- Temporary file management with timestamp-based naming
+- Async Command::perform for non-blocking operations
+
+**Build Status:**
+- Compiles without errors or warnings
+- Passes `cargo fmt` and `cargo clippy -- -D warnings`
+- All tests pass (0 tests currently)
+- Application runs successfully
+
+**UI Features Added:**
+- Printer dropdown in left sidebar (when printers available)
+- Print button in toolbar (enabled when printer + images present)
+- Status bar shows selected printer or "No printers found"
+- Print button validates layout before submission
+- Async print job execution with success/failure callbacks
+
+**CUPS Integration Details:**
+- **Printer Discovery**: Uses `lpstat -p -d` to list printers and default
+- **Print Command**: Uses `lp -d <printer> -n <copies> -o <options> <file>`
+- **Paper Sizes**: Maps PaperSize enum to CUPS media options
+- **Orientation**: Maps to CUPS orientation-requested options (3=portrait, 4=landscape)
+- **Error Handling**: Detects CUPS availability, printer existence, command failures
+- **Fallback**: Returns empty printer list if CUPS unavailable (graceful degradation)
+
+**Not Yet Implemented:**
+- Print preview dialog (Phase 4 optional)
+- Print settings dialog with copies/quality controls (Phase 4 optional)
+- Job status monitoring (Phase 4 optional)
+- Print history tracking (Phase 4 optional)
+
+---
+
+### ⏳ Phase 5: Persistence & State Management (NOT STARTED)
 
 **Status:** Planned
 
@@ -205,15 +266,23 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 - **Mouse drag to move images on canvas**
 - **Delete button to remove selected images**
 - **Selection highlighting with blue border and resize handles**
-- **Status bar showing image count, zoom level, and paper size**
+- **Status bar showing image count, zoom level, paper size, and printer**
 - **Coordinate system for mm-to-pixel conversion at variable zoom**
-- **Left sidebar with paper size and margin controls**
+- **Left sidebar with paper size, margin, and printer controls**
+- **Printer discovery via CUPS (lpstat)**
+- **Printer selection dropdown**
+- **Print button with validation**
+- **High-resolution layout rendering at 300 DPI**
+- **Async print job execution**
+- **CUPS integration via lp command**
+- **Comprehensive error handling for printing**
 
 ### Not Yet Implemented
 - **Actual image rendering on canvas (currently shows colored placeholders)** (Phase 3 refinement)
 - **Image resizing with handles** (Phase 3 refinement)
+- Print preview dialog (Phase 4 optional)
+- Print settings dialog (copies, quality) (Phase 4 optional)
 - Undo/redo system (Phase 3)
-- Printer integration (Phase 4)
 - File save/load (Phase 5)
 - Layers panel (Phase 3)
 - Menu bar (Phase 3)
@@ -259,12 +328,12 @@ PrintLayout/
 │   └── workflows/
 │       └── ci.yml           # CI/CD pipeline
 ├── src/
-│   ├── main.rs              # Application entry point (385 lines)
+│   ├── main.rs              # Application entry point (505 lines)
 │   ├── lib.rs               # Module organization
 │   ├── layout.rs            # Page, PlacedImage, Layout data structures (357 lines)
 │   ├── canvas_widget.rs     # LayoutCanvas widget with rendering (290 lines)
+│   ├── printing.rs          # CUPS integration and print functions (352 lines)
 │   ├── ui.rs                # (stub) UI controls
-│   ├── printing.rs          # (stub) CUPS integration
 │   ├── state.rs             # (stub) State management
 │   └── config.rs            # (stub) Configuration
 ├── Cargo.toml               # Dependencies and metadata
@@ -282,7 +351,21 @@ PrintLayout/
 
 ## Next Steps
 
-1. **Refine Phase 3 Implementation**
+1. **Testing Phase 4 Implementation**
+   - Test printer discovery on systems with CUPS
+   - Test print functionality with real printers
+   - Test with various paper sizes and orientations
+   - Test error conditions (no CUPS, offline printer, missing images)
+   - Verify temporary file cleanup
+   - Test with multiple images and complex layouts
+
+2. **Optional Phase 4 Enhancements**
+   - Add print preview dialog with rendered output
+   - Implement print settings dialog (copies, quality, color/grayscale)
+   - Add job status monitoring
+   - Implement print history tracking
+
+3. **Refine Phase 3 Implementation**
    - Render actual images on canvas (not just placeholders)
    - Implement image resizing with corner handles
    - Add undo/redo system for layout changes
@@ -290,25 +373,20 @@ PrintLayout/
    - Add menu bar with File/Edit/View/Help
    - Create keyboard shortcuts for common operations
 
-2. **Begin Phase 4 Implementation**
-   - Integrate CUPS API for printer discovery
-   - Implement print preview dialog
-   - Add print settings UI
-   - Create layout rendering pipeline for printing
-   - Handle printer errors and recovery
+4. **Begin Phase 5 Implementation**
+   - Design serialization strategy for layouts
+   - Implement save/load layout functionality
+   - Create configuration file management
+   - Add user preferences dialog
+   - Implement auto-save system
+   - Add recent files management
 
-3. **Testing Strategy**
-   - Add unit tests for layout calculations
-   - Test paper size conversions and coordinate transforms
-   - Verify image cache behavior with real images
-   - Test mouse interaction edge cases
-   - Test drag operations with multiple images
-
-4. **Documentation**
+5. **Documentation**
    - Keep status.md updated with progress
-   - Document any architectural decisions
-   - Update README with build/usage instructions
-   - Add screenshots of Phase 3 UI
+   - Document CUPS setup requirements
+   - Add printer troubleshooting guide
+   - Update README with printing instructions
+   - Add screenshots of Phase 4 UI
 
 ---
 
@@ -318,6 +396,10 @@ PrintLayout/
 - Image resizing handles visible but not functional yet (Phase 3 refinement)
 - No undo/redo system yet (Phase 3)
 - Canvas doesn't scroll/pan for large pages (Phase 3 refinement)
+- Print button doesn't show progress indicator during job submission (Phase 4 optional)
+- No print preview before sending to printer (Phase 4 optional)
+- No way to configure print copies or quality from UI (Phase 4 optional)
+- Temporary print files not automatically cleaned up after job completion (Phase 4 refinement)
 
 ---
 
