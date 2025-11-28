@@ -9,8 +9,8 @@ The application is designed to be lightweight, performant, and independent of an
 ### Core Technologies
 
 *   **Programming Language:** Rust
-*   **GUI Toolkit:** Iced (`iced` crate) - cross-desktop, runs on Wayland and X11
-*   **Image Manipulation:** `image` crate (PNG, JPEG, GIF, BMP, WebP, TIFF support)
+*   **GUI Toolkit:** Iced 0.13.1 (`iced` crate) - cross-desktop, runs on Wayland and X11
+*   **Image Manipulation:** `image` crate (PNG, JPEG, GIF, BMP, WebP, TIFF support; rotation, flip, opacity transforms)
 *   **Printing System:** CUPS (via `lp`/`lpstat` subprocess commands for portability)
 *   **Serialization:** `serde` and `serde_json` for saving/loading layouts and preferences
 *   **Async Runtime:** `tokio` for background operations
@@ -26,10 +26,8 @@ The application follows the Model-View-Update (MVU) architecture inherent to the
 *   `src/main.rs` - Application entry point and main state
 *   `src/lib.rs` - Module organization
 *   `src/layout.rs` - Page and image data structures
-*   `src/canvas.rs` - Canvas widget and image cache
-*   `src/ui.rs` - UI controls and layouts
+*   `src/canvas_widget.rs` - Canvas widget with image rendering and transform caching
 *   `src/printing.rs` - CUPS integration
-*   `src/state.rs` - Application state management
 *   `src/config.rs` - Configuration and user preferences
 
 ## Building and Running
@@ -105,6 +103,9 @@ cargo clippy         # Run linter
 ## Key Features
 
 *   **Multi-image layouts** with drag-and-drop, move, resize, and rotate
+*   **Interactive drag-to-resize** with 8 handles (corners and edges)
+*   **Image manipulation tools**: rotate 90° CW/CCW, flip horizontal/vertical, opacity control
+*   **Transform-based image caching** for performance optimization
 *   **Smart snapping** to grid, other images, and page boundaries
 *   **Multi-selection** for batch operations
 *   **Standard paper sizes** (A-series, B-series, Letter, Legal, etc.) with regional defaults

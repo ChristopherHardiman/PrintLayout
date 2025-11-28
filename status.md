@@ -1,6 +1,6 @@
 # PrintLayout - Project Status
 
-**Last Updated:** November 28, 2025  
+**Last Updated:** December 2025  
 **Current Version:** 0.1.0  
 **Repository:** https://github.com/ChristopherHardiman/PrintLayout
 
@@ -37,7 +37,7 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 - All tests pass (0 tests currently)
 
 **Dependencies Installed:**
-- iced 0.12 (GUI toolkit)
+- iced 0.13.1 (GUI toolkit with canvas, image, tokio features)
 - image 0.25 (image manipulation)
 - serde 1.0, serde_json 1.0 (serialization)
 - rfd 0.14 (file dialogs)
@@ -274,7 +274,63 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 
 ---
 
-### ⏳ Phase 6: Packaging & Final Touches (NOT STARTED)
+### ✅ Phase 6: Canon PPL-Style UI & Image Manipulation (COMPLETE)
+
+**Status:** Implemented and tested
+
+**Completed Items:**
+- [x] Major UI redesign to match Canon Professional Print & Layout interface
+- [x] Stored Settings Area (Top): Printer selection and file operations
+- [x] Tools Area: Add/Delete images, zoom controls, orientation toggle
+- [x] Settings Panel (Right): Tabbed panel with Print Settings, Layout, Image tabs
+- [x] Preview Area (Center): Canvas with layout preview
+- [x] Thumbnails Area (Bottom): Horizontal scrolling thumbnails of all images
+- [x] Print Button Area (Bottom Right): Copies input and Print button
+- [x] Iced 0.13.1 upgrade for improved canvas image rendering
+- [x] Image manipulation tools (Image tab):
+  - Rotate 90° clockwise/counter-clockwise
+  - Flip horizontal/vertical
+  - Resize with aspect ratio lock
+  - Opacity control (0-100%)
+- [x] Drag-to-resize functionality with 8 resize handles
+  - Corner handles: TopLeft, TopRight, BottomLeft, BottomRight
+  - Edge handles: Top, Bottom, Left, Right
+  - Aspect ratio preservation option
+- [x] Transform-based image caching for performance
+  - TransformKey struct for cache lookup (path, rotation, flip_h, flip_v, opacity)
+  - Pre-processes images with transforms before creating Iced handles
+  - Efficient HashMap<TransformKey, Handle> cache
+- [x] Canvas preview shows all image transforms (rotation, flip, opacity)
+- [x] Print output applies all transforms correctly
+- [x] Expanded paper options (13 photo sizes, 6 Canon paper types)
+
+**Technical Achievements:**
+- ResizeHandle enum with 8 handle types for intuitive resizing
+- DragMode enum: None, Move, Resize(ResizeHandle) for interaction state tracking
+- find_handle_at_point() helper for 10px corner and 8px edge handle detection
+- ImageCache with get_transformed_handle() for O(1) lookup of pre-processed images
+- PlacedImage fields: flip_horizontal, flip_vertical, opacity
+- Live size updates during drag resize operations
+- Full transform support in printing pipeline
+
+**Build Status:**
+- Compiles without errors or warnings
+- Passes `cargo fmt` and `cargo clippy -- -D warnings`
+- All tests pass (0 tests currently)
+- Application runs successfully
+
+**UI Features Added:**
+- Image tab in Settings Panel with manipulation tools
+- Rotate 90° CW and CCW buttons
+- Flip Horizontal and Vertical buttons
+- Width/Height inputs with "Maintain Aspect Ratio" checkbox
+- Opacity slider (0-100%)
+- 8 visible resize handles on selected images
+- Drag corner/edge handles to resize
+
+---
+
+### ⏳ Phase 7: Packaging & Final Touches (NOT STARTED)
 
 **Status:** Planned
 
@@ -327,9 +383,14 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 - **Configuration persistence across sessions**
 - **Dirty state tracking for unsaved changes**
 - **File dialogs with filters**
+- **Canon PPL-style UI with tabbed settings panel**
+- **Image manipulation tools (rotate, flip, resize, opacity)**
+- **Drag-to-resize with 8 handles (corners and edges)**
+- **Transform-based image caching for performance**
+- **Canvas preview shows all image transforms**
+- **Print output applies all transforms**
 
 ### Not Yet Implemented
-- **Image resizing with handles** (Phase 3 refinement)
 - Print preview dialog (Phase 4 optional)
 - Print settings dialog (copies, quality) (Phase 4 optional)
 - Undo/redo system (Phase 3)
@@ -382,14 +443,12 @@ PrintLayout/
 │   └── workflows/
 │       └── ci.yml           # CI/CD pipeline
 ├── src/
-│   ├── main.rs              # Application entry point (581 lines)
+│   ├── main.rs              # Application entry point (1585 lines)
 │   ├── lib.rs               # Module organization
-│   ├── layout.rs            # Page, PlacedImage, Layout data structures (357 lines)
-│   ├── canvas_widget.rs     # LayoutCanvas widget with image rendering (270 lines)
-│   ├── printing.rs          # CUPS integration and print functions (352 lines)
-│   ├── config.rs            # Configuration and persistence (288 lines)
-│   ├── ui.rs                # (stub) UI controls
-│   └── state.rs             # (stub) State management
+│   ├── layout.rs            # Page, PlacedImage, Layout data structures (490 lines)
+│   ├── canvas_widget.rs     # LayoutCanvas widget with image rendering (445 lines)
+│   ├── printing.rs          # CUPS integration and print functions (419 lines)
+│   └── config.rs            # Configuration and persistence (295 lines)
 ├── Cargo.toml               # Dependencies and metadata
 ├── Makefile                 # Development task shortcuts
 ├── GEMINI.md                # Technical documentation
@@ -476,7 +535,6 @@ The image rendering limitation has been resolved by upgrading from Iced 0.12 to 
 
 ### Other Known Issues
 
-- Image resizing handles visible but not functional yet (Phase 3 refinement)
 - No undo/redo system yet (Phase 3)
 - Canvas doesn't scroll/pan for large pages (Phase 3 refinement)
 - Print button doesn't show progress indicator during job submission (Phase 4 optional)
@@ -504,8 +562,9 @@ See `project_plan.md` for detailed list including:
 
 ## Development Notes
 
-- Using Iced 0.12 for cross-platform GUI (Wayland/X11)
+- Using Iced 0.13.1 for cross-platform GUI (Wayland/X11)
 - Targeting Linux platforms initially
 - CUPS integration via subprocess for portability
 - Following XDG Base Directory specification
 - Minimum target binary size: <15MB (release mode)
+- Image transforms pre-processed using image crate before creating Iced handles

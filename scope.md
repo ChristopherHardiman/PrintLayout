@@ -41,6 +41,13 @@ Paper Types should include settings for Matte, Gloss, Photo Paper, Printer Paper
 - Support for common image formats (PNG, JPEG, GIF, BMP, WebP, TIFF)
 - Image positioning with absolute coordinates and dimensions
 - Individual image properties: position, size, rotation, visibility, lock state
+- **Image manipulation tools:**
+  - Rotate 90° clockwise/counter-clockwise
+  - Flip horizontal/vertical
+  - Resize with aspect ratio lock option
+  - Opacity control (0-100%)
+- **Drag-to-resize** with 8 interactive handles (corners and edges)
+- **Transform-based image caching** for performance optimization
 - **Border/frame options** for images
 - Original pixel dimension tracking for DPI calculations
 - Multiple file selection support

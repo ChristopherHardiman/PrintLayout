@@ -13,11 +13,25 @@ This document outlines the detailed steps to implement the Print Layout applicat
 | Phase 3 | ✅ Complete | UI Controls & File Management |
 | Phase 4 | ✅ Complete | Printing Integration |
 | Phase 5 | ✅ Complete | Persistence & State Management |
-| Phase 6 | 🔄 In Progress | UI Redesign (Canon PPL Style) |
+| Phase 6 | ✅ Complete | UI Redesign (Canon PPL Style) & Image Manipulation |
 | Phase 7 | ⬜ Not Started | Packaging & Final Touches |
 
-### Recent Updates (November 2025)
+### Recent Updates (December 2025)
 
+- **Image Manipulation Tools**: Full image editing capabilities
+  - Rotate 90° clockwise/counter-clockwise
+  - Flip horizontal/vertical
+  - Resize with width/height inputs and aspect ratio lock
+  - Opacity control (0-100%)
+- **Drag-to-Resize**: Interactive handle-based resizing
+  - 8 resize handles (4 corners + 4 edges)
+  - Aspect ratio preservation option during drag
+  - Live size updates during resize operations
+- **Transform-Based Image Caching**: Performance optimization
+  - TransformKey struct for cache lookup (path, rotation, flip_h, flip_v, opacity)
+  - Pre-processes images with image crate transforms before Iced handle creation
+  - HashMap<TransformKey, Handle> for O(1) lookup of transformed images
+- **Code Cleanup**: Removed unused placeholder files (ui.rs, state.rs)
 - **Canon PPL-Style UI Redesign**: Major UI overhaul to match Canon Professional Print & Layout interface
   - **Stored Settings Area (Top)**: Printer selection and file operations (New, Open, Save, Save As)
   - **Tools Area**: Add/Delete images, zoom controls, orientation toggle
