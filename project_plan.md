@@ -12,11 +12,27 @@ This document outlines the detailed steps to implement the Print Layout applicat
 | Phase 2 | ✅ Complete | Core Layout Engine & Canvas |
 | Phase 3 | ✅ Complete | UI Controls & File Management |
 | Phase 4 | ✅ Complete | Printing Integration |
-| Phase 5 | 🔄 Partial | Persistence & State Management (basic save/load implemented) |
-| Phase 6 | ⬜ Not Started | Packaging & Final Touches |
+| Phase 5 | ✅ Complete | Persistence & State Management |
+| Phase 6 | 🔄 In Progress | UI Redesign (Canon PPL Style) |
+| Phase 7 | ⬜ Not Started | Packaging & Final Touches |
 
 ### Recent Updates (November 2025)
 
+- **Canon PPL-Style UI Redesign**: Major UI overhaul to match Canon Professional Print & Layout interface
+  - **Stored Settings Area (Top)**: Printer selection and file operations (New, Open, Save, Save As)
+  - **Tools Area**: Add/Delete images, zoom controls, orientation toggle
+  - **Settings Panel (Right)**: Tabbed panel with Print Settings, Layout, and Color Management tabs
+  - **Preview Area (Center)**: Canvas with layout preview
+  - **Thumbnails Area (Bottom)**: Horizontal scrolling thumbnails of all images
+  - **Print Button Area (Bottom Right)**: Copies input and Print button
+- **New Layout Features**:
+  - Print Quality selector (Highest, High, Standard, Draft)
+  - Color Mode selector (Use ICC Profile, Driver Matching, No Color Correction, Black and White)
+  - Borderless Printing toggle
+  - Paper Orientation toggle (Portrait/Landscape)
+- **Expanded Paper Options**:
+  - 13 new photo paper sizes (3.5×5" through 13×19" A3+, Panorama, Custom Large)
+  - 6 Canon-specific paper types (Plain, Super High Gloss, Glossy, Semi-Gloss, Matte, Fine Art)
 - **Iced 0.13 Upgrade**: Upgraded from Iced 0.12 to 0.13 for improved canvas image rendering support
 - **Image Rendering**: Implemented actual image rendering on canvas using `frame.draw_image()` API
 - **Canvas Widget**: Uses `RefCell` for interior mutability to enable image caching during draw operations

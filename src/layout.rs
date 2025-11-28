@@ -37,6 +37,19 @@ pub enum PaperSize {
     Legal,
     Tabloid,
     Ledger,
+    // Photo sizes (inches converted to mm)
+    Photo3_5x5,      // 3.5" × 5" (88.9 × 127mm)
+    Photo4x6,        // 4" × 6" (101.6 × 152.4mm)
+    Photo5x5,        // 5" × 5" Square (127 × 127mm)
+    Photo5x7,        // 5" × 7" (127 × 177.8mm)
+    Photo7x10,       // 7" × 10" (177.8 × 254mm)
+    Photo8x10,       // 8" × 10" (203.2 × 254mm)
+    Photo10x12,      // 10" × 12" (254 × 304.8mm)
+    Photo11x17,      // 11" × 17" Ledger (279.4 × 431.8mm)
+    Photo12x12,      // 12" × 12" Square (304.8 × 304.8mm)
+    Photo13x19,      // 13" × 19" A3+ (330.2 × 482.6mm)
+    Panorama,        // 210 × 594mm
+    CustomLarge,     // Custom up to 13" × 39" (330.2 × 990.6mm)
     // Custom size (width, height in mm)
     Custom(f32, f32),
 }
@@ -75,6 +88,19 @@ impl PaperSize {
             PaperSize::Legal => (215.9, 355.6),   // 8.5" × 14"
             PaperSize::Tabloid => (279.4, 431.8), // 11" × 17"
             PaperSize::Ledger => (431.8, 279.4),  // 17" × 11"
+            // Photo sizes
+            PaperSize::Photo3_5x5 => (88.9, 127.0),
+            PaperSize::Photo4x6 => (101.6, 152.4),
+            PaperSize::Photo5x5 => (127.0, 127.0),
+            PaperSize::Photo5x7 => (127.0, 177.8),
+            PaperSize::Photo7x10 => (177.8, 254.0),
+            PaperSize::Photo8x10 => (203.2, 254.0),
+            PaperSize::Photo10x12 => (254.0, 304.8),
+            PaperSize::Photo11x17 => (279.4, 431.8),
+            PaperSize::Photo12x12 => (304.8, 304.8),
+            PaperSize::Photo13x19 => (330.2, 482.6),
+            PaperSize::Panorama => (210.0, 594.0),
+            PaperSize::CustomLarge => (330.2, 990.6), // Max 13" × 39"
             PaperSize::Custom(w, h) => (*w, *h),
         }
     }
@@ -105,10 +131,22 @@ impl std::fmt::Display for PaperSize {
             PaperSize::B8 => write!(f, "B8"),
             PaperSize::B9 => write!(f, "B9"),
             PaperSize::B10 => write!(f, "B10"),
-            PaperSize::Letter => write!(f, "Letter"),
-            PaperSize::Legal => write!(f, "Legal"),
-            PaperSize::Tabloid => write!(f, "Tabloid"),
-            PaperSize::Ledger => write!(f, "Ledger"),
+            PaperSize::Letter => write!(f, "Letter (8.5×11\")"),
+            PaperSize::Legal => write!(f, "Legal (8.5×14\")"),
+            PaperSize::Tabloid => write!(f, "Tabloid (11×17\")"),
+            PaperSize::Ledger => write!(f, "Ledger (17×11\")"),
+            PaperSize::Photo3_5x5 => write!(f, "3.5×5\""),
+            PaperSize::Photo4x6 => write!(f, "4×6\""),
+            PaperSize::Photo5x5 => write!(f, "5×5\" Square"),
+            PaperSize::Photo5x7 => write!(f, "5×7\""),
+            PaperSize::Photo7x10 => write!(f, "7×10\""),
+            PaperSize::Photo8x10 => write!(f, "8×10\""),
+            PaperSize::Photo10x12 => write!(f, "10×12\""),
+            PaperSize::Photo11x17 => write!(f, "11×17\" Ledger"),
+            PaperSize::Photo12x12 => write!(f, "12×12\" Square"),
+            PaperSize::Photo13x19 => write!(f, "13×19\" (A3+)"),
+            PaperSize::Panorama => write!(f, "210×594mm Panorama"),
+            PaperSize::CustomLarge => write!(f, "Custom (up to 13×39\")"),
             PaperSize::Custom(w, h) => write!(f, "Custom ({}×{}mm)", w, h),
         }
     }
@@ -126,30 +164,102 @@ impl Default for PaperSize {
 /// Represents paper type for printing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaperType {
-    MattePhoto,
-    GlossPhoto,
-    PhotoPaper,
-    PrinterPaper,
-    Satin,
-    Canvas,
-    RicePaper,
-    Cardstock,
-    Transparency,
+    Plain,              // Plain Paper
+    SuperHighGloss,     // Photo Paper Pro Platinum
+    Glossy,             // Photo Paper Plus Glossy II, Photo Paper Glossy
+    SemiGloss,          // Photo Paper Plus Semi-Gloss, Photo Paper Pro Luster
+    Matte,              // Matte Photo Paper, Photo Paper Premium Matte
+    FineArt,            // Premium Fine Art Rough
+}
+
+impl std::fmt::Display for PaperType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PaperType::Plain => write!(f, "Plain Paper"),
+            PaperType::SuperHighGloss => write!(f, "Super High Gloss (Pro Platinum)"),
+            PaperType::Glossy => write!(f, "Glossy (Plus Glossy II)"),
+            PaperType::SemiGloss => write!(f, "Semi-Gloss (Plus Semi-Gloss)"),
+            PaperType::Matte => write!(f, "Matte (Premium Matte)"),
+            PaperType::FineArt => write!(f, "Fine Art (Premium Rough)"),
+        }
+    }
 }
 
 #[allow(dead_code)]
 impl PaperType {
     pub fn as_str(&self) -> &str {
         match self {
-            PaperType::MattePhoto => "Matte Photo",
-            PaperType::GlossPhoto => "Gloss Photo",
-            PaperType::PhotoPaper => "Photo Paper",
-            PaperType::PrinterPaper => "Printer Paper",
-            PaperType::Satin => "Satin",
-            PaperType::Canvas => "Canvas",
-            PaperType::RicePaper => "Rice Paper",
-            PaperType::Cardstock => "Cardstock",
-            PaperType::Transparency => "Transparency",
+            PaperType::Plain => "Plain Paper",
+            PaperType::SuperHighGloss => "Super High Gloss",
+            PaperType::Glossy => "Glossy",
+            PaperType::SemiGloss => "Semi-Gloss",
+            PaperType::Matte => "Matte",
+            PaperType::FineArt => "Fine Art",
+        }
+    }
+}
+
+impl Default for PaperType {
+    fn default() -> Self {
+        PaperType::Plain
+    }
+}
+
+/// Print quality settings
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PrintQuality {
+    Highest,
+    High,
+    #[default]
+    Standard,
+    Draft,
+}
+
+impl std::fmt::Display for PrintQuality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrintQuality::Highest => write!(f, "Highest"),
+            PrintQuality::High => write!(f, "High"),
+            PrintQuality::Standard => write!(f, "Standard"),
+            PrintQuality::Draft => write!(f, "Draft"),
+        }
+    }
+}
+
+/// Color mode for printing
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ColorMode {
+    #[default]
+    UseICCProfile,
+    DriverMatching,
+    NoColorCorrection,
+    BlackAndWhite,
+}
+
+impl std::fmt::Display for ColorMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColorMode::UseICCProfile => write!(f, "Use ICC Profile"),
+            ColorMode::DriverMatching => write!(f, "Driver Matching"),
+            ColorMode::NoColorCorrection => write!(f, "No Color Correction"),
+            ColorMode::BlackAndWhite => write!(f, "Black and White"),
+        }
+    }
+}
+
+/// Page orientation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Orientation {
+    #[default]
+    Portrait,
+    Landscape,
+}
+
+impl std::fmt::Display for Orientation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Orientation::Portrait => write!(f, "Portrait"),
+            Orientation::Landscape => write!(f, "Landscape"),
         }
     }
 }
@@ -165,6 +275,10 @@ pub struct Page {
     pub margin_right_mm: f32,
     pub paper_size: PaperSize,
     pub paper_type: PaperType,
+    pub print_quality: PrintQuality,
+    pub color_mode: ColorMode,
+    pub orientation: Orientation,
+    pub borderless: bool,
 }
 
 #[allow(dead_code)]
@@ -180,7 +294,11 @@ impl Page {
             margin_left_mm: 25.4,
             margin_right_mm: 25.4,
             paper_size,
-            paper_type: PaperType::PrinterPaper,
+            paper_type: PaperType::Plain,
+            print_quality: PrintQuality::Standard,
+            color_mode: ColorMode::UseICCProfile,
+            orientation: Orientation::Portrait,
+            borderless: false,
         }
     }
 

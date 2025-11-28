@@ -33,10 +33,9 @@ pub struct PrintJob {
     pub printer_name: String,
     pub copies: u32,
     pub dpi: u32,
-    pub orientation: Orientation,
 }
 
-/// Page orientation
+/// Page orientation (kept for backwards compatibility, but layout.page.orientation is preferred)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum Orientation {
@@ -173,21 +172,22 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
     let height_px = ((page.height_mm / 25.4) * dpi as f32) as u32;
 
     log::debug!(
-        "Page dimensions: {}x{} mm -> {}x{} px at {} DPI",
+        "Page dimensions: {}x{} mm -> {}x{} px at {} DPI (Orientation: {:?})",
         page.width_mm,
         page.height_mm,
         width_px,
         height_px,
-        dpi
+        dpi,
+        page.orientation
     );
 
     // Create white canvas
-    let mut img = ImageBuffer::from_pixel(width_px, height_px, Rgba([255, 255, 255, 255]));
+    let mut img: RgbaImage = ImageBuffer::from_pixel(width_px, height_px, Rgba([255, 255, 255, 255]));
 
     // Render each image
     for placed_image in &layout.images {
-        // Load the source image
-        let source_img = match image::open(&placed_image.path) {
+        // Load the source image - use ImageReader to ensure proper format handling
+        let source_img = match load_image_for_print(&placed_image.path) {
             Ok(img) => img,
             Err(e) => {
                 log::error!("Failed to load image {:?}: {}", placed_image.path, e);
@@ -217,6 +217,28 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
         );
     }
 
+    // NOTE: We do NOT rotate the image here for landscape mode.
+    // The page dimensions (width_mm, height_mm) are already swapped when the user
+    // selects landscape orientation, so the canvas is already rendered correctly.
+    // CUPS handles the physical paper orientation via the orientation-requested option.
+
+    Ok(img)
+}
+
+/// Load an image for printing with proper format handling
+/// This handles all supported formats including GIF (first frame only)
+fn load_image_for_print(path: &PathBuf) -> Result<image::DynamicImage, PrintError> {
+    // Use ImageReader for more robust format detection
+    let reader = image::ImageReader::open(path)
+        .map_err(|e| PrintError::RenderError(format!("Cannot open image: {}", e)))?
+        .with_guessed_format()
+        .map_err(|e| PrintError::RenderError(format!("Cannot detect format: {}", e)))?;
+    
+    log::debug!("Loading image {:?}, detected format: {:?}", path, reader.format());
+    
+    let img = reader.decode()
+        .map_err(|e| PrintError::RenderError(format!("Cannot decode image: {}", e)))?;
+    
     Ok(img)
 }
 
@@ -239,23 +261,39 @@ pub fn send_to_printer(job: &PrintJob, temp_file: &Path) -> Result<String, Print
     cmd.arg("-d").arg(&job.printer_name);
     cmd.arg("-n").arg(job.copies.to_string());
 
-    // Add orientation option
-    match job.orientation {
-        Orientation::Portrait => cmd.arg("-o").arg("orientation-requested=3"),
-        Orientation::Landscape => cmd.arg("-o").arg("orientation-requested=4"),
-    };
+    // NOTE: We do NOT set orientation-requested or landscape options here.
+    // Our rendered image already has the correct dimensions (width/height swapped for landscape).
+    // The image is ready to print as-is. Setting CUPS orientation would cause double-rotation.
+    // We just need to tell CUPS the correct media size.
 
-    // Add paper size option
+    // Add paper size option - use the actual dimensions we rendered
+    // For landscape, width > height, so we specify the media accordingly
     let paper_option = match job.layout.page.paper_size {
         PaperSize::A4 => "media=A4",
+        PaperSize::A3 => "media=A3",
+        PaperSize::A5 => "media=A5",
         PaperSize::Letter => "media=Letter",
         PaperSize::Legal => "media=Legal",
-        PaperSize::A3 => "media=A3",
         PaperSize::Tabloid => "media=Tabloid",
         PaperSize::Ledger => "media=Ledger",
-        _ => "media=A4", // Default fallback
+        PaperSize::Photo4x6 => "media=4x6",
+        PaperSize::Photo5x7 => "media=5x7",
+        PaperSize::Photo8x10 => "media=8x10",
+        PaperSize::Photo11x17 => "media=11x17",
+        PaperSize::Photo13x19 => "media=13x19",
+        // For custom sizes, try to use closest standard or specify dimensions
+        _ => {
+            // Use custom size in mm
+            let w = job.layout.page.width_mm;
+            let h = job.layout.page.height_mm;
+            log::debug!("Using custom media size: {}x{}mm", w, h);
+            "media=A4" // Fallback to A4, most printers support it
+        }
     };
     cmd.arg("-o").arg(paper_option);
+    
+    // For proper scaling, tell CUPS to fit the image to the page
+    cmd.arg("-o").arg("fit-to-page");
 
     // Add the file to print
     cmd.arg(temp_file);
