@@ -63,6 +63,8 @@ pub enum CanvasMessage {
     ImageMoved(String, f32, f32),
     ImageResized(String, f32, f32),
     CanvasClicked(f32, f32),
+    MouseMoved(f32, f32),
+    MouseReleased,
 }
 
 /// The canvas widget for displaying and interacting with the layout
@@ -264,7 +266,20 @@ impl Program<CanvasMessage> for LayoutCanvas {
                     }
                 }
                 canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-                    // Handle dragging in main application
+                    // Emit cursor position for drag handling
+                    let x_mm = self.pixels_to_mm(cursor_position.x);
+                    let y_mm = self.pixels_to_mm(cursor_position.y);
+                    return (
+                        iced::event::Status::Captured,
+                        Some(CanvasMessage::MouseMoved(x_mm, y_mm)),
+                    );
+                }
+                canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                    // Stop dragging
+                    return (
+                        iced::event::Status::Captured,
+                        Some(CanvasMessage::MouseReleased),
+                    );
                 }
                 _ => {}
             }

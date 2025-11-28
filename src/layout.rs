@@ -80,6 +80,40 @@ impl PaperSize {
     }
 }
 
+impl std::fmt::Display for PaperSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PaperSize::A0 => write!(f, "A0"),
+            PaperSize::A1 => write!(f, "A1"),
+            PaperSize::A2 => write!(f, "A2"),
+            PaperSize::A3 => write!(f, "A3"),
+            PaperSize::A4 => write!(f, "A4"),
+            PaperSize::A5 => write!(f, "A5"),
+            PaperSize::A6 => write!(f, "A6"),
+            PaperSize::A7 => write!(f, "A7"),
+            PaperSize::A8 => write!(f, "A8"),
+            PaperSize::A9 => write!(f, "A9"),
+            PaperSize::A10 => write!(f, "A10"),
+            PaperSize::B0 => write!(f, "B0"),
+            PaperSize::B1 => write!(f, "B1"),
+            PaperSize::B2 => write!(f, "B2"),
+            PaperSize::B3 => write!(f, "B3"),
+            PaperSize::B4 => write!(f, "B4"),
+            PaperSize::B5 => write!(f, "B5"),
+            PaperSize::B6 => write!(f, "B6"),
+            PaperSize::B7 => write!(f, "B7"),
+            PaperSize::B8 => write!(f, "B8"),
+            PaperSize::B9 => write!(f, "B9"),
+            PaperSize::B10 => write!(f, "B10"),
+            PaperSize::Letter => write!(f, "Letter"),
+            PaperSize::Legal => write!(f, "Legal"),
+            PaperSize::Tabloid => write!(f, "Tabloid"),
+            PaperSize::Ledger => write!(f, "Ledger"),
+            PaperSize::Custom(w, h) => write!(f, "Custom ({}×{}mm)", w, h),
+        }
+    }
+}
+
 #[allow(clippy::derivable_impls)]
 impl Default for PaperSize {
     fn default() -> Self {

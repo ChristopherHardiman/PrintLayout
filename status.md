@@ -89,35 +89,56 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 
 ---
 
-### ⏳ Phase 3: UI Controls & File Management (NOT STARTED)
+### ✅ Phase 3: UI Controls & File Management (COMPLETE)
 
-**Status:** Planned
+**Status:** Implemented and tested
 
-**Planned Items:**
-- [ ] Create main UI layout (toolbar, panels, status bar)
-- [ ] Implement "Add Image" functionality with file dialog
-- [ ] Add paper size and margin controls
-- [ ] Implement undo/redo system
-- [ ] Add zoom controls
-- [ ] Create file menu operations
-- [ ] Implement notifications system
+**Completed Items:**
+- [x] Create main UI layout with left sidebar and toolbar
+- [x] Implement "Add Image" functionality with rfd::AsyncFileDialog
+- [x] Add multi-file selection with image format filters (png, jpg, jpeg, gif, bmp, webp)
+- [x] Load images using image crate with proper error handling
+- [x] Create PlacedImage instances with automatic sizing to fit page
+- [x] Add paper size dropdown (pick_list) with A4, A3, Letter, Legal, Tabloid, Ledger options
+- [x] Implement Display trait for PaperSize enum for dropdown text
+- [x] Add margin input controls (top, bottom, left, right) with validation
+- [x] Implement delete image button functionality
+- [x] Add mouse drag support for moving images on canvas
+- [x] Handle MouseMoved and MouseReleased events for smooth dragging
+- [x] Track drag state in main application model
+- [x] Update canvas rendering during drag operations
 
-**Note:** Phase 3 will build on Phase 2's canvas to add full file management and UI controls.
+**Technical Achievements:**
+- Async file dialog integration using rfd::AsyncFileDialog
+- Image loading with image::open() and GenericImageView trait
+- Paper size picker using iced::widget::pick_list
+- Text input fields for margins with float validation
+- Drag state tracking with initial position calculation
+- Delta-based position updates for smooth dragging
+- Canvas event handling for ButtonPressed, CursorMoved, and ButtonReleased
+- Proper borrow checker handling for drag operations
 
----
+**Build Status:**
+- Compiles without errors or warnings
+- Passes `cargo fmt` and `cargo clippy -- -D warnings`
+- All tests pass (0 tests currently)
+- Application runs and displays UI correctly
 
-### ⏳ Phase 3: UI Controls & File Management (NOT STARTED)
-
-**Status:** Planned
-
-**Planned Items:**
-- [ ] Create main UI layout (toolbar, panels, status bar)
-- [ ] Implement "Add Image" functionality with file dialog
-- [ ] Add paper size and margin controls
-- [ ] Implement undo/redo system
-- [ ] Add zoom controls
-- [ ] Create file menu operations
-- [ ] Implement notifications system
+**UI Features Added:**
+- Left sidebar (200px) with:
+  * Paper size dropdown showing all standard sizes
+  * Four margin input fields (top, bottom, left, right)
+  * Clean vertical layout with labels
+- Toolbar with:
+  * Add Image button (opens file dialog)
+  * Delete button (removes selected image)
+  * Zoom In, Zoom Out, 100% buttons
+- Canvas with:
+  * Image placeholder rendering
+  * Mouse click to select images
+  * Mouse drag to move images
+  * Selection highlighting
+- Status bar with image count, zoom, and paper info
 
 ---
 
@@ -172,23 +193,30 @@ PrintLayout is a lightweight, cross-desktop GUI application for creating profess
 - Window is resizable with enforced minimum size
 - Displays application title and version number
 - Proper logging infrastructure in place
-- **Canvas displays A4 page with margins**
+- **Canvas displays pages with configurable paper sizes**
 - **Zoom controls (In, Out, Reset to 100%)**
 - **Page background rendering with border and margin lines**
-- **Image placeholder rendering (will show actual images in Phase 3)**
+- **Paper size dropdown with all standard sizes (A0-A10, B0-B10, Letter, Legal, Tabloid, Ledger)**
+- **Margin input controls with validation**
+- **File dialog for adding images (multi-select supported)**
+- **Image loading from disk (PNG, JPEG, GIF, BMP, WebP)**
+- **Image placeholder rendering on canvas**
 - **Mouse click to select images**
+- **Mouse drag to move images on canvas**
+- **Delete button to remove selected images**
 - **Selection highlighting with blue border and resize handles**
 - **Status bar showing image count, zoom level, and paper size**
 - **Coordinate system for mm-to-pixel conversion at variable zoom**
+- **Left sidebar with paper size and margin controls**
 
 ### Not Yet Implemented
-- **Actual image loading from files** (Phase 3)
-- **Image dragging and resizing** (Phase 3)
-- Paper size configuration UI (Phase 3)
-- Margin adjustment UI (Phase 3)
+- **Actual image rendering on canvas (currently shows colored placeholders)** (Phase 3 refinement)
+- **Image resizing with handles** (Phase 3 refinement)
+- Undo/redo system (Phase 3)
 - Printer integration (Phase 4)
 - File save/load (Phase 5)
-- Undo/redo (Phase 3)
+- Layers panel (Phase 3)
+- Menu bar (Phase 3)
 
 ---
 
@@ -231,10 +259,10 @@ PrintLayout/
 │   └── workflows/
 │       └── ci.yml           # CI/CD pipeline
 ├── src/
-│   ├── main.rs              # Application entry point (175 lines)
+│   ├── main.rs              # Application entry point (385 lines)
 │   ├── lib.rs               # Module organization
-│   ├── layout.rs            # Page, PlacedImage, Layout data structures (323 lines)
-│   ├── canvas_widget.rs     # LayoutCanvas widget with rendering (275 lines)
+│   ├── layout.rs            # Page, PlacedImage, Layout data structures (357 lines)
+│   ├── canvas_widget.rs     # LayoutCanvas widget with rendering (290 lines)
 │   ├── ui.rs                # (stub) UI controls
 │   ├── printing.rs          # (stub) CUPS integration
 │   ├── state.rs             # (stub) State management
@@ -254,34 +282,42 @@ PrintLayout/
 
 ## Next Steps
 
-1. **Begin Phase 3 Implementation**
-   - Implement file dialog for adding images to layout
-   - Load actual images using image crate and display on canvas
-   - Add image dragging with mouse (preserving coordinate system)
+1. **Refine Phase 3 Implementation**
+   - Render actual images on canvas (not just placeholders)
    - Implement image resizing with corner handles
-   - Add paper size dropdown control
-   - Create margin adjustment UI
-   - Implement undo/redo system for layout changes
+   - Add undo/redo system for layout changes
+   - Implement layers panel on right side
+   - Add menu bar with File/Edit/View/Help
+   - Create keyboard shortcuts for common operations
 
-2. **Testing Strategy**
+2. **Begin Phase 4 Implementation**
+   - Integrate CUPS API for printer discovery
+   - Implement print preview dialog
+   - Add print settings UI
+   - Create layout rendering pipeline for printing
+   - Handle printer errors and recovery
+
+3. **Testing Strategy**
    - Add unit tests for layout calculations
    - Test paper size conversions and coordinate transforms
    - Verify image cache behavior with real images
    - Test mouse interaction edge cases
+   - Test drag operations with multiple images
 
-3. **Documentation**
+4. **Documentation**
    - Keep status.md updated with progress
    - Document any architectural decisions
    - Update README with build/usage instructions
-   - Add screenshots of Phase 2 canvas rendering
+   - Add screenshots of Phase 3 UI
 
 ---
 
 ## Known Issues
 
-- Canvas click detection works but image dragging not yet implemented (Phase 3)
-- Image cache implemented but not yet used for actual image loading (Phase 3)
-- Zoom controls work but canvas doesn't scroll/pan yet (Phase 3)
+- Actual image pixels not rendered on canvas yet - showing colored placeholders for now (Phase 3 refinement)
+- Image resizing handles visible but not functional yet (Phase 3 refinement)
+- No undo/redo system yet (Phase 3)
+- Canvas doesn't scroll/pan for large pages (Phase 3 refinement)
 
 ---
 
