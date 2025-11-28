@@ -5,6 +5,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Color, Element, Length, Padding, Size, Task, Theme};
 use ::image::GenericImageView;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 mod canvas_widget;
@@ -152,6 +153,8 @@ struct PrintLayout {
     // UI dialogs/menus state
     show_recent_files_menu: bool,
     show_recovery_dialog: bool,
+    // Thumbnail cache for performance
+    thumbnail_cache: HashMap<PathBuf, iced::widget::image::Handle>,
 }
 
 impl PrintLayout {
@@ -232,6 +235,7 @@ impl PrintLayout {
             auto_save_counter: 0,
             show_recent_files_menu: false,
             show_recovery_dialog: false,
+            thumbnail_cache: HashMap::new(),
         };
         
         let mut tasks = vec![
@@ -459,6 +463,9 @@ impl PrintLayout {
                             let (width, height) = img.dimensions();
                             let placed_image = PlacedImage::new(path.clone(), width, height);
                             self.layout.add_image(placed_image);
+                            // Cache the thumbnail handle
+                            let handle = iced::widget::image::Handle::from_path(&path);
+                            self.thumbnail_cache.insert(path.clone(), handle);
                             log::info!("Added image: {} ({}x{})", path.display(), width, height);
                         }
                         Err(e) => log::error!("Failed to load image {}: {}", path.display(), e),
@@ -469,6 +476,10 @@ impl PrintLayout {
             }
             Message::DeleteImageClicked => {
                 if let Some(id) = &self.layout.selected_image_id.clone() {
+                    // Remove from thumbnail cache
+                    if let Some(img) = self.layout.get_image(id) {
+                        self.thumbnail_cache.remove(&img.path);
+                    }
                     self.layout.remove_image(id);
                     self.canvas.set_layout(self.layout.clone());
                     self.is_modified = true;
@@ -855,6 +866,12 @@ impl PrintLayout {
                         self.project = Some(project);
                         self.is_modified = false;
                         
+                        // Pre-populate thumbnail cache for loaded images
+                        for item in &self.layout.images {
+                            self.thumbnail_cache.entry(item.path.clone())
+                                .or_insert_with(|| iced::widget::image::Handle::from_path(&item.path));
+                        }
+                        
                         // Update recent files
                         if let Some(path) = &self.current_file {
                             self.config_manager.add_recent_file(&mut self.preferences, path.clone());
@@ -883,6 +900,13 @@ impl PrintLayout {
                         self.canvas.set_layout(self.layout.clone());
                         self.project = Some(project);
                         self.is_modified = true;
+                        
+                        // Pre-populate thumbnail cache for recovered images
+                        for item in &self.layout.images {
+                            self.thumbnail_cache.entry(item.path.clone())
+                                .or_insert_with(|| iced::widget::image::Handle::from_path(&item.path));
+                        }
+                        
                         let _ = self.config_manager.delete_auto_save();
                         log::info!("Recovered from auto-save");
                     }
@@ -1351,8 +1375,12 @@ impl PrintLayout {
             let is_selected = self.layout.selected_image_id.as_ref() == Some(&img.id);
             let style = if is_selected { button::primary } else { button::secondary };
             
-            // Create image thumbnail using actual image
-            let img_handle = iced::widget::image::Handle::from_path(&img.path);
+            // Use cached thumbnail handle or create from path
+            let img_handle = self.thumbnail_cache
+                .get(&img.path)
+                .cloned()
+                .unwrap_or_else(|| iced::widget::image::Handle::from_path(&img.path));
+            
             let thumb_image = iced_image(img_handle)
                 .width(Length::Fixed(60.0))
                 .height(Length::Fixed(60.0));
