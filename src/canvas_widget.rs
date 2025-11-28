@@ -12,46 +12,35 @@ use std::path::PathBuf;
 #[derive(Debug, Default)]
 #[allow(dead_code)]
 pub struct ImageCache {
-    cache: HashMap<PathBuf, image::DynamicImage>,
-    max_size_mb: usize,
-    current_size_mb: usize,
+    // Note: In Iced 0.12, canvas Frame does not support draw_image()
+    // This cache is prepared for future use or alternative rendering approaches
+    // For now, we use placeholder rectangles on canvas
+    _cache: HashMap<PathBuf, ()>,
 }
 
 #[allow(dead_code)]
 impl ImageCache {
-    /// Create a new image cache with default size limit (500MB)
+    /// Create a new image cache
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
-            max_size_mb: 500,
-            current_size_mb: 0,
+            _cache: HashMap::new(),
         }
     }
 
     /// Load an image from cache or from disk
-    pub fn load(&mut self, path: &PathBuf) -> Option<image::DynamicImage> {
-        if let Some(img) = self.cache.get(path) {
-            Some(img.clone())
-        } else {
-            // Load image from disk
-            if let Ok(img) = image::open(path) {
-                self.cache.insert(path.clone(), img.clone());
-                Some(img)
-            } else {
-                None
-            }
-        }
+    /// Note: Currently returns None as canvas Frame doesn't support draw_image() in Iced 0.12
+    pub fn load(&mut self, _path: &PathBuf) -> Option<()> {
+        None
     }
 
     /// Clear the cache
     pub fn clear(&mut self) {
-        self.cache.clear();
-        self.current_size_mb = 0;
+        self._cache.clear();
     }
 
     /// Remove a specific image from cache
     pub fn invalidate(&mut self, path: &PathBuf) {
-        self.cache.remove(path);
+        self._cache.remove(path);
     }
 }
 
@@ -75,7 +64,7 @@ pub struct LayoutCanvas {
     #[allow(dead_code)]
     image_cache: ImageCache,
 }
-#[allow(dead_code)]
+
 impl LayoutCanvas {
     /// Create a new layout canvas
     pub fn new(layout: Layout) -> Self {
@@ -94,6 +83,7 @@ impl LayoutCanvas {
     }
 
     /// Get the current layout
+    #[allow(dead_code)]
     pub fn layout(&self) -> &Layout {
         &self.layout
     }
@@ -105,12 +95,13 @@ impl LayoutCanvas {
     }
 
     /// Get the current zoom level
+    #[allow(dead_code)]
     pub fn zoom(&self) -> f32 {
         self.zoom
     }
 
     /// Convert millimeters to pixels for rendering
-    fn mm_to_pixels(&self, mm: f32) -> f32 {
+    pub fn mm_to_pixels(&self, mm: f32) -> f32 {
         // Assume 96 DPI for screen rendering
         let pixels_per_mm = 96.0 / 25.4;
         mm * pixels_per_mm * self.zoom
@@ -162,9 +153,10 @@ impl LayoutCanvas {
             let width = self.mm_to_pixels(image.width_mm);
             let height = self.mm_to_pixels(image.height_mm);
 
-            // Draw image placeholder (colored rectangle)
+            // Draw placeholder rectangle with semi-transparent fill
+            // Note: Iced 0.12 canvas Frame does not expose draw_image() in public API
             let image_rect = Path::rectangle(Point::new(x, y), Size::new(width, height));
-            frame.fill(&image_rect, Color::from_rgb(0.9, 0.9, 1.0));
+            frame.fill(&image_rect, Color::from_rgba(0.85, 0.90, 1.0, 0.8));
             frame.stroke(
                 &image_rect,
                 Stroke::default()
@@ -203,16 +195,25 @@ impl LayoutCanvas {
                 }
             }
 
-            // Draw image filename
+            // Draw image filename label with background
             let filename = image
                 .path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
+            
+            // Background for text
+            let text_bg_width = (filename.len() as f32 * 7.0).max(50.0);
+            let text_bg = Path::rectangle(
+                Point::new(x, y),
+                Size::new(text_bg_width, 20.0),
+            );
+            frame.fill(&text_bg, Color::from_rgba(0.0, 0.0, 0.0, 0.7));
+            
             frame.fill_text(Text {
                 content: filename.to_string(),
                 position: Point::new(x + 5.0, y + 5.0),
-                color: Color::BLACK,
+                color: Color::WHITE,
                 size: 12.0.into(),
                 ..Default::default()
             });

@@ -1,4 +1,6 @@
-use iced::widget::{button, canvas, column, container, pick_list, row, text, text_input};
+use iced::widget::{
+    button, canvas, column, container, pick_list, row, text, text_input,
+};
 use iced::{executor, Length};
 use iced::{Application, Command, Element, Settings, Size, Theme};
 use image::GenericImageView;
@@ -462,7 +464,8 @@ impl Application for PrintLayout {
             .into();
         let canvas_widget = canvas_elem.map(Message::CanvasMessage);
 
-        // Main content area
+        // Main content area - for now just use canvas
+        // TODO: Implement image widget overlays when Iced provides better positioning APIs
         let main_area = column![toolbar, canvas_widget].spacing(0);
 
         // Combine with sidebar
