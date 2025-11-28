@@ -286,16 +286,6 @@ impl ConfigManager {
         // Keep only 10 most recent
         prefs.recent_files.truncate(10);
     }
-
-    /// Get cache directory path
-    pub fn cache_dir(&self) -> &PathBuf {
-        &self.cache_dir
-    }
-
-    /// Get config directory path
-    pub fn config_dir(&self) -> &PathBuf {
-        &self.config_dir
-    }
 }
 
 impl Default for ConfigManager {

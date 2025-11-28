@@ -36,14 +36,6 @@ impl ImageCache {
             None
         }
     }
-
-    pub fn clear(&mut self) {
-        self.cache.clear();
-    }
-
-    pub fn invalidate(&mut self, path: &PathBuf) {
-        self.cache.remove(path);
-    }
 }
 
 /// Messages that can be sent from the canvas

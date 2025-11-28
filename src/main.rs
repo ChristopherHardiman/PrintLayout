@@ -114,7 +114,6 @@ struct PrintLayout {
     copies_input: String,
     // UI state
     settings_tab: SettingsTab,
-    show_thumbnails: bool,
     print_status: PrintStatus,
     // Config and file state
     config_manager: ConfigManager,
@@ -188,7 +187,6 @@ impl PrintLayout {
             print_dpi: 300,
             copies_input: print_copies.to_string(),
             settings_tab: SettingsTab::PrintSettings,
-            show_thumbnails: true,
             print_status: PrintStatus::Idle,
             config_manager,
             preferences,
