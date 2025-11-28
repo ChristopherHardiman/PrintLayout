@@ -1,46 +1,48 @@
-// canvas_widget.rs - Canvas widget implementation
-// Phase 2: Custom Canvas Widget and Image Cache
+// canvas_widget.rs - Canvas widget implementation with image rendering
+// Updated for Iced 0.13 with draw_image support
 
 use crate::layout::Layout;
 use iced::mouse::{self, Cursor};
-use iced::widget::canvas::{self, Cache, Frame, Geometry, Path, Program, Stroke, Text};
+use iced::widget::canvas::{self, Cache, Frame, Geometry, Image, Path, Program, Stroke, Text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Image cache to avoid reloading images
+/// Image handle cache to avoid recreating handles
 #[derive(Debug, Default)]
-#[allow(dead_code)]
 pub struct ImageCache {
-    // Note: In Iced 0.12, canvas Frame does not support draw_image()
-    // This cache is prepared for future use or alternative rendering approaches
-    // For now, we use placeholder rectangles on canvas
-    _cache: HashMap<PathBuf, ()>,
+    cache: HashMap<PathBuf, iced::widget::image::Handle>,
 }
 
-#[allow(dead_code)]
 impl ImageCache {
-    /// Create a new image cache
     pub fn new() -> Self {
         Self {
-            _cache: HashMap::new(),
+            cache: HashMap::new(),
         }
     }
 
-    /// Load an image from cache or from disk
-    /// Note: Currently returns None as canvas Frame doesn't support draw_image() in Iced 0.12
-    pub fn load(&mut self, _path: &PathBuf) -> Option<()> {
-        None
+    /// Get or create an image handle for the given path
+    pub fn get_handle(&mut self, path: &PathBuf) -> Option<iced::widget::image::Handle> {
+        if let Some(handle) = self.cache.get(path) {
+            return Some(handle.clone());
+        }
+
+        if path.exists() {
+            let handle = iced::widget::image::Handle::from_path(path);
+            self.cache.insert(path.clone(), handle.clone());
+            Some(handle)
+        } else {
+            None
+        }
     }
 
-    /// Clear the cache
     pub fn clear(&mut self) {
-        self._cache.clear();
+        self.cache.clear();
     }
 
-    /// Remove a specific image from cache
     pub fn invalidate(&mut self, path: &PathBuf) {
-        self._cache.remove(path);
+        self.cache.remove(path);
     }
 }
 
@@ -61,59 +63,50 @@ pub struct LayoutCanvas {
     layout: Layout,
     zoom: f32,
     cache: Cache,
-    #[allow(dead_code)]
-    image_cache: ImageCache,
+    // Use RefCell for interior mutability to allow caching in draw()
+    image_cache: RefCell<ImageCache>,
 }
 
 impl LayoutCanvas {
-    /// Create a new layout canvas
     pub fn new(layout: Layout) -> Self {
         Self {
             layout,
             zoom: 1.0,
             cache: Cache::new(),
-            image_cache: ImageCache::new(),
+            image_cache: RefCell::new(ImageCache::new()),
         }
     }
 
-    /// Update the layout
     pub fn set_layout(&mut self, layout: Layout) {
         self.layout = layout;
         self.cache.clear();
     }
 
-    /// Get the current layout
     #[allow(dead_code)]
     pub fn layout(&self) -> &Layout {
         &self.layout
     }
 
-    /// Set the zoom level
     pub fn set_zoom(&mut self, zoom: f32) {
         self.zoom = zoom.clamp(0.1, 5.0);
         self.cache.clear();
     }
 
-    /// Get the current zoom level
     #[allow(dead_code)]
     pub fn zoom(&self) -> f32 {
         self.zoom
     }
 
-    /// Convert millimeters to pixels for rendering
     pub fn mm_to_pixels(&self, mm: f32) -> f32 {
-        // Assume 96 DPI for screen rendering
         let pixels_per_mm = 96.0 / 25.4;
         mm * pixels_per_mm * self.zoom
     }
 
-    /// Convert pixels to millimeters
     fn pixels_to_mm(&self, pixels: f32) -> f32 {
         let pixels_per_mm = 96.0 / 25.4;
         pixels / (pixels_per_mm * self.zoom)
     }
 
-    /// Draw the canvas content
     fn draw_content(&self, frame: &mut Frame) {
         let page = &self.layout.page;
 
@@ -146,17 +139,30 @@ impl LayoutCanvas {
                 .with_color(Color::from_rgb(0.7, 0.7, 0.7)),
         );
 
-        // Draw images
-        for image in &self.layout.images {
-            let x = self.mm_to_pixels(image.x_mm);
-            let y = self.mm_to_pixels(image.y_mm);
-            let width = self.mm_to_pixels(image.width_mm);
-            let height = self.mm_to_pixels(image.height_mm);
+        // Get mutable access to image cache via RefCell
+        let mut image_cache = self.image_cache.borrow_mut();
 
-            // Draw placeholder rectangle with semi-transparent fill
-            // Note: Iced 0.12 canvas Frame does not expose draw_image() in public API
+        // Draw images
+        for img in &self.layout.images {
+            let x = self.mm_to_pixels(img.x_mm);
+            let y = self.mm_to_pixels(img.y_mm);
+            let width = self.mm_to_pixels(img.width_mm);
+            let height = self.mm_to_pixels(img.height_mm);
+
+            let bounds = Rectangle::new(Point::new(x, y), Size::new(width, height));
+
+            // Try to draw actual image using Iced 0.13's draw_image
+            if let Some(handle) = image_cache.get_handle(&img.path) {
+                let image = Image::new(handle);
+                frame.draw_image(bounds, image);
+            } else {
+                // Fallback: draw placeholder rectangle if image can't be loaded
+                let image_rect = Path::rectangle(Point::new(x, y), Size::new(width, height));
+                frame.fill(&image_rect, Color::from_rgba(0.85, 0.90, 1.0, 0.8));
+            }
+
+            // Draw border
             let image_rect = Path::rectangle(Point::new(x, y), Size::new(width, height));
-            frame.fill(&image_rect, Color::from_rgba(0.85, 0.90, 1.0, 0.8));
             frame.stroke(
                 &image_rect,
                 Stroke::default()
@@ -165,7 +171,7 @@ impl LayoutCanvas {
             );
 
             // Highlight selected image
-            if self.layout.selected_image_id.as_ref() == Some(&image.id) {
+            if self.layout.selected_image_id.as_ref() == Some(&img.id) {
                 frame.stroke(
                     &image_rect,
                     Stroke::default()
@@ -173,13 +179,13 @@ impl LayoutCanvas {
                         .with_color(Color::from_rgb(0.0, 0.5, 1.0)),
                 );
 
-                // Draw resize handles at corners
+                // Draw resize handles
                 let handle_size = 8.0;
                 let corners = [
-                    (x, y),                  // Top-left
-                    (x + width, y),          // Top-right
-                    (x, y + height),         // Bottom-left
-                    (x + width, y + height), // Bottom-right
+                    (x, y),
+                    (x + width, y),
+                    (x, y + height),
+                    (x + width, y + height),
                 ];
 
                 for (cx, cy) in corners.iter() {
@@ -195,21 +201,17 @@ impl LayoutCanvas {
                 }
             }
 
-            // Draw image filename label with background
-            let filename = image
+            // Draw filename label
+            let filename = img
                 .path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            
-            // Background for text
+
             let text_bg_width = (filename.len() as f32 * 7.0).max(50.0);
-            let text_bg = Path::rectangle(
-                Point::new(x, y),
-                Size::new(text_bg_width, 20.0),
-            );
+            let text_bg = Path::rectangle(Point::new(x, y), Size::new(text_bg_width, 20.0));
             frame.fill(&text_bg, Color::from_rgba(0.0, 0.0, 0.0, 0.7));
-            
+
             frame.fill_text(Text {
                 content: filename.to_string(),
                 position: Point::new(x + 5.0, y + 5.0),
@@ -249,11 +251,9 @@ impl Program<CanvasMessage> for LayoutCanvas {
         if let Some(cursor_position) = cursor.position_in(bounds) {
             match event {
                 canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                    // Convert screen coordinates to layout coordinates
                     let x_mm = self.pixels_to_mm(cursor_position.x);
                     let y_mm = self.pixels_to_mm(cursor_position.y);
 
-                    // Check if clicking on an image
                     if let Some(image) = self.layout.find_image_at_point(x_mm, y_mm) {
                         return (
                             iced::event::Status::Captured,
@@ -267,7 +267,6 @@ impl Program<CanvasMessage> for LayoutCanvas {
                     }
                 }
                 canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-                    // Emit cursor position for drag handling
                     let x_mm = self.pixels_to_mm(cursor_position.x);
                     let y_mm = self.pixels_to_mm(cursor_position.y);
                     return (
@@ -276,7 +275,6 @@ impl Program<CanvasMessage> for LayoutCanvas {
                     );
                 }
                 canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                    // Stop dragging
                     return (
                         iced::event::Status::Captured,
                         Some(CanvasMessage::MouseReleased),

@@ -4,7 +4,27 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 1: Project Setup & Basic Window
+## Progress Summary
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1 | ✅ Complete | Project Setup & Basic Window |
+| Phase 2 | ✅ Complete | Core Layout Engine & Canvas |
+| Phase 3 | ✅ Complete | UI Controls & File Management |
+| Phase 4 | ✅ Complete | Printing Integration |
+| Phase 5 | 🔄 Partial | Persistence & State Management (basic save/load implemented) |
+| Phase 6 | ⬜ Not Started | Packaging & Final Touches |
+
+### Recent Updates (November 2025)
+
+- **Iced 0.13 Upgrade**: Upgraded from Iced 0.12 to 0.13 for improved canvas image rendering support
+- **Image Rendering**: Implemented actual image rendering on canvas using `frame.draw_image()` API
+- **Canvas Widget**: Uses `RefCell` for interior mutability to enable image caching during draw operations
+- **Image Cache**: Implemented `ImageCache` with `iced::widget::image::Handle` for efficient image loading
+
+---
+
+### Phase 1: Project Setup & Basic Window ✅ COMPLETE
 
 **Goal:** Initialize the project and get a basic, empty window to appear on the screen.
 
@@ -128,7 +148,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 2: Core Layout Engine & Canvas
+### Phase 2: Core Layout Engine & Canvas ✅ COMPLETE
 
 **Goal:** Create a canvas where images can be programmatically placed, moved, and resized.
 
@@ -299,7 +319,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 3: UI Controls & File Management
+### Phase 3: UI Controls & File Management ✅ COMPLETE
 
 **Goal:** Add UI elements to interact with the layout engine.
 
@@ -481,7 +501,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 4: Printing Integration
+### Phase 4: Printing Integration ✅ COMPLETE
 
 **Goal:** Send the final layout to a physical printer using CUPS.
 
@@ -696,9 +716,20 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 5: Persistence & State Management
+### Phase 5: Persistence & State Management 🔄 IN PROGRESS
 
 **Goal:** Save and load user preferences and layout projects.
+
+**Implemented:**
+- Basic project save/load functionality
+- JSON serialization for layouts
+- File dialog integration
+
+**Remaining:**
+- Auto-save system
+- Preferences dialog
+- Recent files management
+- Project backup system
 
 1.  **Design Serialization Strategy in `src/config.rs`:**
     *   Create `struct UserPreferences` containing:
@@ -897,7 +928,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 6: Packaging & Final Touches
+### Phase 6: Packaging & Final Touches ⬜ NOT STARTED
 
 **Goal:** Polish the application and package it for distribution.
 
