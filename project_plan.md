@@ -24,6 +24,10 @@ This document outlines the detailed steps to implement the Print Layout applicat
     name = "print_layout"
     version = "0.1.0"
     edition = "2021"
+    authors = ["Your Name <your.email@example.com>"]
+    description = "Lightweight cross-desktop GUI for creating print layouts"
+    license = "Apache-2.0"
+    repository = "https://github.com/ChristopherHardiman/PrintLayout"
     
     [dependencies]
     iced = { version = "0.12", features = ["canvas", "tokio", "debug"] }
@@ -32,9 +36,15 @@ This document outlines the detailed steps to implement the Print Layout applicat
     serde_json = "1.0"
     rfd = "0.14"
     tokio = { version = "1", features = ["full"] }
+    log = "0.4"
+    env_logger = "0.11"
+    directories = "5.0"  # XDG directory support
+    uuid = { version = "1.0", features = ["v4"] }
+    chrono = { version = "0.4", features = ["serde"] }
     ```
     *   Set a reasonable initial window size in the application settings (e.g., 1200x800).
     *   Add a version constant that can be updated for future releases.
+    *   **Dependency Strategy:** Pin major versions to avoid breaking changes. Document fallback strategies for critical dependencies like CUPS integration.
 
 3.  **Create Module Structure:**
     *   Create `src/main.rs` as the entry point.
@@ -107,6 +117,15 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Add `.gitignore` entries for Rust build artifacts.
     *   Create `Makefile` or shell scripts for common tasks (build, run, test, clean).
 
+9.  **Set Up CI/CD Pipeline:**
+    *   Create `.github/workflows/ci.yml` for GitHub Actions:
+        - Run `cargo fmt --check` on every PR
+        - Run `cargo clippy` for linting
+        - Run `cargo test` for all tests
+        - Build release binaries for x86_64 and ARM64
+    *   Configure automated releases on tag push
+    *   Set up cross-compilation targets for different Linux architectures
+
 ---
 
 ### Phase 2: Core Layout Engine & Canvas
@@ -128,7 +147,13 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - `rotation_degrees` - 0-360 degrees for rotation
         - `z_order` - Layer ordering for overlapping images
         - `is_selected` - Current selection state
+        - `is_visible` - Visibility toggle for layers panel
+        - `is_locked` - Prevent accidental modification
+        - `original_width_px`, `original_height_px` - Native image dimensions for DPI calculations
+        - `border_width_mm` - Optional border/frame width
+        - `border_color` - Optional border color (RGBA)
         - Helper methods: `bounds_mm()`, `contains_point(x, y)` for hit testing
+        - Helper method: `effective_dpi()` - Calculate print DPI based on current size vs original pixels
     *   Create `struct Layout` containing:
         - `page` - The Page configuration
         - `images` - Vec of PlacedImage
@@ -137,11 +162,16 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Add serialization derives to all structures for Phase 5 integration.
 
 2.  **Implement Standard Paper Sizes in `src/layout.rs`:**
-    *   Create `enum PaperSize` with variants: A0-A10, Letter, Legal, Tabloid, Ledger, and custom
-    *   Create `enum PaperType` with variants: MattePhoto, GlossPhoto, PhotoPaper, PrinterPaper, Satin, Canvas, RicePaper
+    *   Create `enum PaperSize` with variants: A0-A10, Letter, Legal, Tabloid, Ledger, B-series (B0-B10), and Custom
+    *   Create `enum PaperType` with variants: MattePhoto, GlossPhoto, PhotoPaper, PrinterPaper, Satin, Canvas, RicePaper, Cardstock, Transparency
     *   Implement `trait` or methods to convert PaperSize to (width_mm, height_mm)
     *   Implement helper function `paper_size_to_dimensions(size: PaperSize) -> (f32, f32)`
-    *   Document all standard sizes with their exact dimensions for accuracy.
+    *   Document all standard sizes with their exact dimensions for accuracy:
+        - A4: 210 × 297 mm
+        - Letter: 215.9 × 279.4 mm (8.5 × 11 in)
+        - Legal: 215.9 × 355.6 mm (8.5 × 14 in)
+        - etc.
+    *   **Regional Defaults:** Detect system locale and default to appropriate paper size (Letter for US/Canada, A4 for most other regions).
 
 3.  **Create Image Cache in `src/canvas.rs`:**
     *   Implement an `ImageCache` struct that stores loaded `iced::widget::canvas::Image` objects
@@ -149,6 +179,16 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Add cache invalidation method for when images are deleted or replaced
     *   Implement bounds checking and error handling for missing/corrupted image files
     *   Load images in background using tokio tasks to prevent UI freezing (important for Phase 4 integration)
+    *   **Supported Image Formats:**
+        - Core: PNG, JPEG, GIF, BMP, WebP
+        - Extended: TIFF (common for print workflows)
+        - Future consideration: HEIC/HEIF (requires additional library)
+        - Note: RAW format support deferred to future version (requires specialized libraries)
+    *   **Memory Management:**
+        - Set configurable cache size limit (default 500MB)
+        - Implement LRU (Least Recently Used) eviction policy
+        - Store image metadata separately from pixel data
+        - Unload full resolution when not actively editing
 
 4.  **Implement a Custom Canvas Widget in `src/canvas.rs`:**
     *   Create `struct LayoutCanvas` implementing `iced::widget::canvas::Program`
@@ -159,8 +199,16 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - Draws selection indicators (bounding box with corner handles) for selected image
         - Draws grid overlay (optional, toggleable for alignment aid)
         - Uses proper color scheme (white page, light gray margins, handle indicators in accent color)
+        - **DPI Warning Indicator:** Draw red/orange border on images that will print below 150 DPI at current size
+        - **Alignment Guides:** Draw snap lines when dragging near other images, page center, or margins
     *   Implement proper coordinate transformation from mm to pixels based on zoom level
     *   Add zoom support (Ctrl+Scroll) to scale canvas view (10%-500% range)
+    *   **Smart Snapping System:**
+        - Snap to grid (configurable: 1mm, 5mm, 10mm)
+        - Snap to other image edges and centers
+        - Snap to page center lines (horizontal and vertical)
+        - Snap to margin boundaries
+        - Hold Alt to temporarily disable snapping
 
 5.  **Handle Mouse Input on the Canvas:**
     *   Implement `on_event()` method to capture:
@@ -176,37 +224,65 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - `DragMode::MoveImage` - Translate selected image with constrained boundaries (keep within margins)
         - `DragMode::ResizeHandle(HandlePosition)` - Resize from specific handle with aspect ratio option
         - `DragMode::None` - No active drag
+        - `DragMode::PanCanvas` - Middle-click or Space+drag to pan view
+        - `DragMode::SelectionBox` - Click+drag on empty area to select multiple images
     *   Store drag state in a `drag_state` field with:
         - Current drag mode
         - Original position/size before drag started
         - Current cursor position
         - Offset from cursor to element center
+    *   **Drag and Drop from File Manager:**
+        - Accept dropped image files onto canvas
+        - Parse `text/uri-list` MIME type for file paths
+        - Place dropped image at cursor position
+        - Support dropping multiple files at once (arrange in grid)
+    *   **Multi-Selection Support:**
+        - Ctrl+Click to add/remove images from selection
+        - Shift+Click to select range (by z-order)
+        - Selection box to select multiple images at once
+        - Move/resize operations apply to all selected images
 
 6.  **Produce and Handle Canvas Messages:**
     *   Define `CanvasMessage` enum:
         - `SelectImage(image_id)`
+        - `SelectMultipleImages(Vec<image_id>)`
         - `DeselectImage`
+        - `DeselectAll`
         - `MoveImage { image_id, delta_x, delta_y }`
+        - `MoveSelectedImages { delta_x, delta_y }`
         - `ResizeImage { image_id, new_width, new_height }`
         - `RotateImage { image_id, angle_delta }`
         - `ChangeZOrder { image_id, direction: ZOrder }`
+        - `ToggleImageVisibility(image_id)`
+        - `ToggleImageLock(image_id)`
+        - `AlignImages { alignment: Alignment }` - Left, Right, Top, Bottom, Center H, Center V
+        - `DistributeImages { direction: Direction }` - Evenly space selected images
+        - `FilesDropped(Vec<PathBuf>)`
     *   Forward these messages to main `Message` enum
     *   In `update()` function, handle each message by:
-        - Validating the operation is allowed
+        - Validating the operation is allowed (check if image is locked)
         - Updating the layout state
         - Marking layout as modified (for dirty tracking)
         - Requesting redraw
 
 7.  **Implement Keyboard Shortcuts in Canvas:**
     *   Support keyboard events for canvas efficiency:
-        - `Delete` - Remove selected image
-        - `Ctrl+C` - Copy selected image (store in clipboard)
-        - `Ctrl+V` - Paste copied image with offset
+        - `Delete` - Remove selected image(s)
+        - `Ctrl+A` - Select all images
+        - `Ctrl+C` - Copy selected image(s) (store in clipboard)
+        - `Ctrl+V` - Paste copied image(s) with offset
+        - `Ctrl+D` - Duplicate selected image(s) in place
         - `Arrow Keys` - Fine movement of selected image (1mm per press)
         - `Shift+Arrow Keys` - Faster movement (10mm per press)
-        - `+/-` - Rotate selected image by 5 degrees
+        - `+/-` or `R/Shift+R` - Rotate selected image by 5 degrees
         - `Z` - Cycle through overlapping images at cursor
         - `F` - Fit image to page while maintaining aspect ratio
+        - `L` - Toggle lock on selected image
+        - `H` - Toggle visibility of selected image
+        - `[` / `]` - Move selected image down/up in z-order
+        - `Ctrl+[` / `Ctrl+]` - Send to back / Bring to front
+        - `Escape` - Deselect all
+        - `Space` (hold) - Temporarily enable canvas panning mode
 
 8.  **Test Canvas Implementation:**
     *   Verify canvas renders correctly with:
@@ -250,26 +326,34 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Make panels collapsible to maximize canvas space
 
 2.  **Implement "Add Image" Button and File Dialog:**
-    *   Add button to toolbar with tooltip "Add Image to Layout (Ctrl+O)"
-    *   Add keyboard shortcut `Ctrl+O` for Add Image
+    *   Add button to toolbar with tooltip "Add Image to Layout (Ctrl+I)"
+    *   Add keyboard shortcut `Ctrl+I` for Add Image (Ctrl+O reserved for Open Layout)
     *   On click, create `Message::AddImageClicked`
     *   In `update()` function, handle this message:
         - Use `rfd::AsyncFileDialog` to open non-blocking file picker
-        - Filter for image files (.png, .jpg, .jpeg, .gif, .bmp, .webp)
+        - Filter for image files (.png, .jpg, .jpeg, .gif, .bmp, .webp, .tiff, .tif)
+        - Allow multiple file selection
         - Launch picker in background task using `iced::Command::perform()`
-        - Return `Message::ImageFileSelected(path)` when file is chosen
-    *   Handle `Message::ImageFileSelected(path)`:
-        - Validate file exists and is readable
-        - Attempt to load image metadata (dimensions, format)
-        - Create new `PlacedImage` with default positioning:
-            - Position: center of page (calculated from page dimensions)
-            - Size: Scale image to fit on page while maintaining aspect ratio (max 80% of printable area)
-            - Rotation: 0 degrees
-            - Z-order: highest (top layer)
-        - Add to layout
-        - Select the new image
-        - Cache the image for rendering
-        - Show success or error notification
+        - Return `Message::ImageFilesSelected(Vec<path>)` when files are chosen
+    *   Handle `Message::ImageFilesSelected(paths)`:
+        - For each path:
+            - Validate file exists and is readable
+            - Attempt to load image metadata (dimensions, format)
+            - Check file size (warn if > 50MB, reject if > 100MB)
+            - Create new `PlacedImage` with default positioning:
+                - Position: center of page (calculated from page dimensions), offset for multiple images
+                - Size: Scale image to fit on page while maintaining aspect ratio (max 80% of printable area)
+                - Rotation: 0 degrees
+                - Z-order: highest (top layer)
+            - Store original pixel dimensions for DPI calculations
+            - Add to layout
+        - Select the last added image (or all if multiple)
+        - Cache the images for rendering
+        - Show success or error notification with count
+    *   **DPI Quality Check:**
+        - Calculate effective DPI based on image pixels vs. placed size
+        - Show warning if DPI < 150: "Image may appear pixelated when printed"
+        - Show info if DPI > 300: "Image quality is excellent for printing"
 
 3.  **Implement Image Deletion:**
     *   Add Delete button to toolbar and right-click context menu on canvas
@@ -284,12 +368,13 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 4.  **Implement Paper Size and Margin Controls:**
     *   Paper size dropdown (`PickList` widget):
-        - Options: All standard sizes (A0-A10, Letter, Legal, Tabloid, Ledger, Custom)
+        - Options: All standard sizes (A0-A10, B0-B10, Letter, Legal, Tabloid, Ledger, Custom)
         - On selection change: `Message::PaperSizeChanged(size)`
         - In update: Update `layout.page` dimensions, adjust images that exceed new bounds
         - Show dimensions in parentheses (e.g., "A4 (210×297 mm)")
+        - Default based on system locale (Letter for US, A4 for others)
     *   Paper type dropdown:
-        - Options: MattePhoto, GlossPhoto, PhotoPaper, PrinterPaper, Satin, Canvas, RicePaper
+        - Options: MattePhoto, GlossPhoto, PhotoPaper, PrinterPaper, Satin, Canvas, RicePaper, Cardstock, Transparency
         - Store selection for printer configuration (Phase 4)
         - Display selected type in status bar
     *   Orientation toggle buttons (Portrait/Landscape):
@@ -301,10 +386,16 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - Spin boxes with up/down arrows and text input
         - Range: 0.0 mm to 50.0 mm
         - Step size: 0.5 mm with Shift for 1mm increments
+        - "Link" toggle to set all margins equally
+        - Preset buttons: "None (0mm)", "Small (5mm)", "Medium (10mm)", "Large (25mm)"
         - On change: `Message::MarginsChanged { top, bottom, left, right }`
         - Update page margins and redraw margin lines on canvas
         - Validate that margins don't exceed page dimensions
         - Show warning if margins exceed printable area
+    *   **Custom Paper Size:**
+        - When "Custom" selected, show width/height input fields
+        - Units toggle: mm / inches
+        - Save custom sizes to preferences for reuse
 
 5.  **Implement Undo/Redo System:**
     *   Create `struct StateHistory` containing:
@@ -368,13 +459,25 @@ This document outlines the detailed steps to implement the Print Layout applicat
             - "Invalid image file format"
             - "Changes not saved"
 
-10. **Test UI Implementation:**
+10. **Implement Basic Image Adjustments (Optional for v0.1):**
+    *   Add "Image Properties" panel when image selected:
+        - Position X/Y (number inputs with mm/inch toggle)
+        - Width/Height (with aspect ratio lock option)
+        - Rotation angle (slider or number input)
+        - Border width and color
+    *   **Future consideration:** Basic adjustments like brightness/contrast
+        - Defer complex image editing to external tools
+        - Add "Edit in..." menu item to open in system image editor
+
+11. **Test UI Implementation:**
     *   Verify all buttons, dropdowns, and inputs respond correctly
     *   Test keyboard shortcuts for all major functions
     *   Verify controls update canvas appropriately
     *   Test with various paper sizes and margin configurations
     *   Ensure UI is responsive with many images on layout
     *   Test undo/redo with multiple operations
+    *   Test drag-and-drop from file manager
+    *   Test multi-selection operations
 
 ---
 
@@ -383,10 +486,17 @@ This document outlines the detailed steps to implement the Print Layout applicat
 **Goal:** Send the final layout to a physical printer using CUPS.
 
 1.  **Research CUPS API and Dependencies:**
-    *   Add `cups-rs` crate or use `subprocess` with `lp` command (more portable)
+    *   **Primary approach:** Use `subprocess` with `lp` and `lpstat` commands (most portable, no library dependency)
+    *   **Alternative:** `cups-rs` crate if available and maintained
+    *   **Fallback strategy:** Document manual print workflow if CUPS unavailable
     *   Research CUPS daemon requirements and ensure it's running on target systems
     *   Create `src/printing.rs` module for all printer-related functionality
     *   Document printer capabilities needed: paper sizes, media types, resolutions, color modes
+    *   **IPP Support:** Consider Internet Printing Protocol for network printers
+    *   **Security Considerations:**
+        - Sanitize all file paths passed to print commands
+        - Validate printer names to prevent command injection
+        - Use secure temporary file creation with proper permissions
 
 2.  **Add Printer Discovery System in `src/printing.rs`:**
     *   Create `struct PrinterInfo` containing:
@@ -431,13 +541,18 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - Actual colors and scaling
         - Margins and safe areas
         - Image resolution warning if images are too low DPI for quality print
+        - Per-image DPI indicator overlay
     *   Implement `fn render_layout_to_image() -> ImageBuffer`:
         - Create temporary in-memory image at print resolution (DPI from printer)
         - Render page background (white)
         - Render each image at correct position and scale
-        - Apply color space conversion if needed
+        - Apply color space conversion if needed (sRGB for most printers)
         - Return the image buffer
     *   Show preview in modal dialog with ability to zoom and pan
+    *   **Color Management (Basic):**
+        - Default to sRGB color space for output
+        - Future: ICC profile support for professional color accuracy
+        - Note in documentation that color-critical work should use calibrated workflow
 
 5.  **Implement Print Settings Dialog:**
     *   Create comprehensive print settings dialog with sections:
@@ -571,8 +686,13 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - Printer offline
         - Invalid paper configuration
         - File permission issues
-    *   Verify temporary files are cleaned up properly
+        - CUPS daemon not running
+    *   Verify temporary files are cleaned up properly (including on crash)
     *   Benchmark rendering time for layouts with many images
+    *   **Security Testing:**
+        - Test with malicious file paths
+        - Verify temporary files have correct permissions (600)
+        - Ensure cleanup on all exit paths
 
 ---
 
@@ -589,10 +709,17 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - `last_open_directory: PathBuf` - For file dialogs
         - `zoom_level: f32` - Last zoom percentage
         - `window_size: (u32, u32)` - Last window dimensions
+        - `window_position: Option<(i32, i32)>` - Last window position
         - `ui_panels_visible: (bool, bool, bool)` - Visibility of panels
         - `recent_files: Vec<PathBuf>` - Last 10 opened layouts
         - `auto_save_enabled: bool` - Whether to auto-save periodically
         - `auto_save_interval_seconds: u32` - Default 5 minutes
+        - `show_dpi_warnings: bool` - Whether to show low DPI warnings
+        - `snap_to_grid: bool` - Enable/disable snapping
+        - `grid_size_mm: f32` - Grid size for snapping
+        - `measurement_units: Units` - mm or inches
+        - `locale: Option<String>` - Override system locale
+        - `custom_paper_sizes: Vec<CustomPaperSize>` - User-defined paper sizes
     *   Add serialization derives to all structures (already done in Phase 2)
     *   Create `struct ProjectLayout` for saving complete layouts:
         - `version: String` - Project file version (e.g., "0.1.0")
@@ -763,6 +890,10 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Test with missing image files on load
     *   Verify no corruption on crashes
     *   Performance test: Load/save large layouts (50+ images)
+    *   **Security Testing:**
+        - Test with paths containing special characters
+        - Verify config file permissions (600 or 644)
+        - Test behavior with read-only config directory
 
 ---
 
@@ -773,7 +904,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
 1.  **Refine User Interface:**
     *   **Visual Polish**
         - Implement consistent color scheme throughout app
-        - Create application icon (256x256 SVG and PNG)
+        - Create application icon (256x256 SVG and PNG, multiple sizes for different contexts)
         - Add visual feedback for all interactive elements:
             - Hover states for buttons
             - Active/inactive states
@@ -781,6 +912,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
             - Progress bars for file operations
         - Improve spacing and alignment across all panels
         - Use consistent typography with readable font sizes
+        - Support system dark/light theme detection
     *   **Accessibility**
         - Ensure all UI elements have proper labels and alt text
         - Support keyboard navigation (Tab through controls)
@@ -788,6 +920,12 @@ This document outlines the detailed steps to implement the Print Layout applicat
         - Use sufficient color contrast (WCAG AA compliance)
         - Test with screen readers if possible
         - Support high-DPI displays
+        - Ensure all functionality accessible via keyboard
+    *   **Internationalization (i18n) Preparation:**
+        - Use string constants for all user-visible text
+        - Structure code to support future translation
+        - Document locale-specific behaviors (paper sizes, units)
+        - Note: Full translation support deferred to future version
 
 2.  **Implement Comprehensive Error Handling:**
     *   Create error dialog system showing:
@@ -947,18 +1085,28 @@ This document outlines the detailed steps to implement the Print Layout applicat
             lto = true
             codegen-units = 1
             strip = true
+            panic = "abort"
             ```
         - Test release build: `cargo build --release`
         - Binary size target: <15MB
+    *   **Cross-Compilation:**
+        - Set up cross-compilation for ARM64 (aarch64-unknown-linux-gnu)
+        - Test on Raspberry Pi or ARM-based systems
+        - Document any platform-specific limitations
     *   **AppImage Creation**
-        - Install `cargo-appimage` or similar tool
+        - Install `cargo-appimage` or `appimagetool`
         - Create AppImage that runs on any Linux distro
         - Include all dependencies in AppImage
-        - Test on different distros
+        - Create .desktop file with proper categories
+        - Test on different distros (Ubuntu, Fedora, Arch)
     *   **Debian Package**
         - Create `debian/` directory with control files
         - Build .deb with `cargo-deb`
         - Test installation with `dpkg`
+        - Specify dependencies: libcups2, etc.
+    *   **Flatpak (Future):**
+        - Consider Flatpak for sandboxed distribution
+        - Document portal requirements for printing
     *   **Checksums and Signing**
         - Generate SHA256 checksums for releases
         - Create GPG signatures (optional for initial release)
@@ -1034,3 +1182,61 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   Provide regular updates and patches
     *   Document user tips and tricks
     *   Consider adding user survey for feature requests
+
+---
+
+### Future Considerations (Post v1.0)
+
+The following features are out of scope for the initial release but should be considered for future versions:
+
+1.  **Multi-Page Support:**
+    - Multiple pages in a single project
+    - Page navigation and thumbnails
+    - Booklet printing mode
+
+2.  **Advanced Color Management:**
+    - ICC profile support for input images
+    - Printer ICC profile integration
+    - Soft proofing mode
+    - CMYK preview
+
+3.  **Template System:**
+    - Pre-built layout templates (photo collages, business cards, etc.)
+    - User-saved templates
+    - Template marketplace/sharing
+
+4.  **Advanced Image Editing:**
+    - In-app cropping tool
+    - Basic adjustments (brightness, contrast, saturation)
+    - Simple filters and effects
+    - Red-eye removal
+
+5.  **RAW Image Support:**
+    - Camera RAW file formats (CR2, NEF, ARW, etc.)
+    - Requires integration with libraw or similar
+    - Significant development effort
+
+6.  **PDF Export:**
+    - Export layout as PDF for sharing
+    - PDF/X compliance for professional printing
+    - Embedded fonts and color profiles
+
+7.  **Cloud Integration:**
+    - Cloud printing services
+    - Cloud storage for layouts
+    - Sync preferences across devices
+
+8.  **Full Localization:**
+    - Complete UI translation
+    - RTL language support
+    - Localized documentation
+
+9.  **Plugin System:**
+    - Extensible architecture for community plugins
+    - Custom paper sizes via plugins
+    - Additional export formats
+
+10. **Batch Processing:**
+    - Print multiple layouts in sequence
+    - Batch import and layout generation
+    - Contact sheet generation
