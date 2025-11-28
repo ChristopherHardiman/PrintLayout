@@ -746,20 +746,22 @@ This document outlines the detailed steps to implement the Print Layout applicat
 
 ---
 
-### Phase 5: Persistence & State Management 🔄 IN PROGRESS
+### Phase 5: Persistence & State Management ✅ COMPLETE
 
 **Goal:** Save and load user preferences and layout projects.
 
 **Implemented:**
-- Basic project save/load functionality
-- JSON serialization for layouts
-- File dialog integration
-
-**Remaining:**
-- Auto-save system
-- Preferences dialog
-- Recent files management
-- Project backup system
+- Project save/load functionality with .pxl format
+- JSON serialization for layouts and preferences
+- File dialog integration (rfd)
+- Auto-save system (every 30 seconds when modified)
+- Auto-save recovery dialog on startup
+- Recent files tracking (up to 10 files)
+- Recent files dropdown UI in toolbar
+- Project backup system (keeps 5 most recent)
+- Dirty state tracking with (*) indicator in window title
+- Configuration persistence (~/.config/print_layout/)
+- Last print settings restoration
 
 1.  **Design Serialization Strategy in `src/config.rs`:**
     *   Create `struct UserPreferences` containing:

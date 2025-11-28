@@ -21,7 +21,7 @@ pub fn main() -> iced::Result {
     env_logger::init();
     log::info!("Initializing Print Layout v{}", VERSION);
     
-    iced::application("Print Layout", PrintLayout::update, PrintLayout::view)
+    iced::application(PrintLayout::title, PrintLayout::update, PrintLayout::view)
         .theme(PrintLayout::theme)
         .window_size(Size::new(1400.0, 900.0))
         .run_with(PrintLayout::new)
@@ -102,6 +102,9 @@ pub enum Message {
     RecoverAutoSave,
     DiscardAutoSave,
     AutoSaveTick,
+    // Recent files
+    OpenRecentFile(PathBuf),
+    ToggleRecentFilesMenu,
 }
 
 /// Tracks what kind of drag operation is in progress
@@ -146,6 +149,9 @@ struct PrintLayout {
     project: Option<ProjectLayout>,
     is_modified: bool,
     auto_save_counter: u32,
+    // UI dialogs/menus state
+    show_recent_files_menu: bool,
+    show_recovery_dialog: bool,
 }
 
 impl PrintLayout {
@@ -224,6 +230,8 @@ impl PrintLayout {
             project: None,
             is_modified: false,
             auto_save_counter: 0,
+            show_recent_files_menu: false,
+            show_recovery_dialog: false,
         };
         
         let mut tasks = vec![
@@ -863,11 +871,12 @@ impl PrintLayout {
             Message::CheckAutoSave => {
                 if self.config_manager.has_auto_save() {
                     log::info!("Auto-save file detected");
-                    // In a real app, show a dialog to ask user
-                    // For now, just log it
+                    // Show recovery dialog to user
+                    self.show_recovery_dialog = true;
                 }
             }
             Message::RecoverAutoSave => {
+                self.show_recovery_dialog = false;
                 match self.config_manager.load_auto_save() {
                     Ok(project) => {
                         self.layout = project.layout.clone();
@@ -883,6 +892,7 @@ impl PrintLayout {
                 }
             }
             Message::DiscardAutoSave => {
+                self.show_recovery_dialog = false;
                 let _ = self.config_manager.delete_auto_save();
                 log::info!("Discarded auto-save");
             }
@@ -902,6 +912,35 @@ impl PrintLayout {
                     },
                     |_| Message::AutoSaveTick,
                 );
+            }
+            Message::OpenRecentFile(path) => {
+                self.show_recent_files_menu = false;
+                // Check if file exists
+                if path.exists() {
+                    let path_clone = path.clone();
+                    return Task::perform(
+                        async move {
+                            match std::fs::read_to_string(&path_clone) {
+                                Ok(contents) => {
+                                    match serde_json::from_str::<ProjectLayout>(&contents) {
+                                        Ok(project) => Ok(project),
+                                        Err(e) => Err(format!("Failed to parse layout: {}", e)),
+                                    }
+                                }
+                                Err(e) => Err(format!("Failed to read file: {}", e)),
+                            }
+                        },
+                        Message::LayoutLoaded,
+                    );
+                } else {
+                    // Remove from recent files if it no longer exists
+                    self.preferences.recent_files.retain(|p| p != &path);
+                    let _ = self.config_manager.save_config(&self.preferences);
+                    log::warn!("Recent file no longer exists: {:?}", path);
+                }
+            }
+            Message::ToggleRecentFilesMenu => {
+                self.show_recent_files_menu = !self.show_recent_files_menu;
             }
         }
         Task::none()
@@ -963,12 +1002,25 @@ impl PrintLayout {
                 .width(Length::Fixed(200.0))
         };
 
+        // Build recent files button with indicator
+        let recent_btn_text = if self.preferences.recent_files.is_empty() {
+            "Recent".to_string()
+        } else {
+            format!("Recent ({})", self.preferences.recent_files.len())
+        };
+        let recent_button = if self.preferences.recent_files.is_empty() {
+            button(text(recent_btn_text).size(12))
+        } else {
+            button(text(recent_btn_text).size(12)).on_press(Message::ToggleRecentFilesMenu)
+        };
+
         let stored_settings_area = row![
             text("Printer:").size(14),
             printer_picker,
             Space::with_width(Length::Fixed(20.0)),
             button("New").on_press(Message::NewLayout),
             button("Open").on_press(Message::OpenLayoutClicked),
+            recent_button,
             button("Save").on_press(Message::SaveLayoutClicked),
             button("Save As").on_press(Message::SaveLayoutAs),
         ]
@@ -1407,9 +1459,115 @@ impl PrintLayout {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        // Show modal overlay when printing
+        // Create the base with optional overlays
         let dark_text = Color::from_rgb(0.1, 0.1, 0.1);
         
+        // First, check if we need to show the recovery dialog
+        if self.show_recovery_dialog {
+            let modal_content = container(
+                column![
+                    text("Recover Unsaved Work?").size(20).color(dark_text),
+                    Space::with_height(Length::Fixed(15.0)),
+                    text("An auto-save file was found from a previous session.").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
+                    text("Would you like to recover it?").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
+                    Space::with_height(Length::Fixed(20.0)),
+                    row![
+                        button(text("Recover").size(14))
+                            .on_press(Message::RecoverAutoSave)
+                            .padding(Padding::from([10, 30])),
+                        Space::with_width(Length::Fixed(20.0)),
+                        button(text("Discard").size(14))
+                            .on_press(Message::DiscardAutoSave)
+                            .style(button::secondary)
+                            .padding(Padding::from([10, 30])),
+                    ]
+                    .spacing(10),
+                ]
+                .align_x(Alignment::Center)
+                .spacing(5)
+            )
+            .padding(40)
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(Color::WHITE)),
+                border: iced::Border {
+                    color: Color::from_rgb(0.3, 0.5, 0.8),
+                    width: 3.0,
+                    radius: 12.0.into(),
+                },
+                ..Default::default()
+            });
+
+            return iced::widget::stack![
+                base,
+                opaque(
+                    mouse_area(
+                        center(modal_content)
+                            .style(|_theme| container::Style {
+                                background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
+                                ..Default::default()
+                            })
+                    )
+                )
+            ]
+            .into();
+        }
+        
+        // Show recent files popup if toggled
+        if self.show_recent_files_menu && !self.preferences.recent_files.is_empty() {
+            let recent_items: Vec<Element<'_, Message>> = self.preferences.recent_files
+                .iter()
+                .take(10)
+                .map(|path| {
+                    let display_name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("Unknown");
+                    let path_clone = path.clone();
+                    button(text(display_name).size(12))
+                        .width(Length::Fill)
+                        .on_press(Message::OpenRecentFile(path_clone))
+                        .style(button::text)
+                        .into()
+                })
+                .collect();
+            
+            let popup_content = container(
+                column(recent_items)
+                    .spacing(2)
+                    .width(Length::Fixed(250.0))
+            )
+            .padding(10)
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(Color::WHITE)),
+                border: iced::Border {
+                    color: Color::from_rgb(0.7, 0.7, 0.7),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                ..Default::default()
+            });
+
+            // Position the popup near the top-left where the buttons are
+            let popup_positioned = container(
+                column![
+                    Space::with_height(Length::Fixed(50.0)), // Offset from top
+                    row![
+                        Space::with_width(Length::Fixed(400.0)), // Offset from left to align with Recent button
+                        popup_content,
+                    ],
+                ]
+            )
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+            return iced::widget::stack![
+                base,
+                mouse_area(popup_positioned)
+                    .on_press(Message::ToggleRecentFilesMenu)
+            ]
+            .into();
+        }
+
+        // Show modal overlay when printing
         match &self.print_status {
             PrintStatus::Idle => base.into(),
             PrintStatus::Rendering => {
@@ -1576,6 +1734,24 @@ impl PrintLayout {
                 ]
                 .into()
             }
+        }
+    }
+
+    pub fn title(&self) -> String {
+        let base_title = match &self.current_file {
+            Some(path) => {
+                let filename = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Unnamed");
+                format!("Print Layout - {}", filename)
+            }
+            None => "Print Layout".to_string(),
+        };
+        
+        if self.is_modified {
+            format!("{}*", base_title)
+        } else {
+            base_title
         }
     }
 
