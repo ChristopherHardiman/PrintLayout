@@ -1,7 +1,7 @@
 // canvas_widget.rs - Canvas widget implementation with image rendering
 // Updated for Iced 0.13 with draw_image support
 
-use crate::layout::Layout;
+use crate::layout::{Layout, PlacedImage};
 use iced::mouse::{self, Cursor};
 use iced::widget::canvas::{self, Cache, Frame, Geometry, Image, Path, Program, Stroke, Text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme};
@@ -9,10 +9,32 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Cache key that includes transform parameters
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct TransformKey {
+    path: PathBuf,
+    rotation_degrees: i32,  // Rounded to int for hash
+    flip_horizontal: bool,
+    flip_vertical: bool,
+    opacity_percent: u8,    // 0-100 for hash
+}
+
+impl TransformKey {
+    fn from_placed_image(img: &PlacedImage) -> Self {
+        Self {
+            path: img.path.clone(),
+            rotation_degrees: (img.rotation_degrees as i32) % 360,
+            flip_horizontal: img.flip_horizontal,
+            flip_vertical: img.flip_vertical,
+            opacity_percent: (img.opacity * 100.0) as u8,
+        }
+    }
+}
+
 /// Image handle cache to avoid recreating handles
 #[derive(Debug, Default)]
 pub struct ImageCache {
-    cache: HashMap<PathBuf, iced::widget::image::Handle>,
+    cache: HashMap<TransformKey, iced::widget::image::Handle>,
 }
 
 impl ImageCache {
@@ -22,19 +44,72 @@ impl ImageCache {
         }
     }
 
-    /// Get or create an image handle for the given path
-    pub fn get_handle(&mut self, path: &PathBuf) -> Option<iced::widget::image::Handle> {
-        if let Some(handle) = self.cache.get(path) {
+    /// Get or create a transformed image handle for the given placed image
+    pub fn get_transformed_handle(&mut self, img: &PlacedImage) -> Option<iced::widget::image::Handle> {
+        let key = TransformKey::from_placed_image(img);
+        
+        if let Some(handle) = self.cache.get(&key) {
             return Some(handle.clone());
         }
 
-        if path.exists() {
-            let handle = iced::widget::image::Handle::from_path(path);
-            self.cache.insert(path.clone(), handle.clone());
-            Some(handle)
-        } else {
-            None
+        if !img.path.exists() {
+            return None;
         }
+
+        // Load and transform the image
+        let source = match image::open(&img.path) {
+            Ok(img) => img,
+            Err(_) => return None,
+        };
+
+        // Apply rotation (90° increments)
+        let rotation_normalized = ((img.rotation_degrees % 360.0) + 360.0) % 360.0;
+        let rotated = if rotation_normalized >= 85.0 && rotation_normalized <= 95.0 {
+            source.rotate90()
+        } else if rotation_normalized >= 175.0 && rotation_normalized <= 185.0 {
+            source.rotate180()
+        } else if rotation_normalized >= 265.0 && rotation_normalized <= 275.0 {
+            source.rotate270()
+        } else {
+            source
+        };
+
+        // Apply flips
+        let flipped = if img.flip_horizontal && img.flip_vertical {
+            rotated.fliph().flipv()
+        } else if img.flip_horizontal {
+            rotated.fliph()
+        } else if img.flip_vertical {
+            rotated.flipv()
+        } else {
+            rotated
+        };
+
+        // Apply opacity
+        let mut rgba = flipped.to_rgba8();
+        if img.opacity < 1.0 {
+            let opacity_factor = img.opacity.clamp(0.0, 1.0);
+            for pixel in rgba.pixels_mut() {
+                pixel[3] = (pixel[3] as f32 * opacity_factor) as u8;
+            }
+        }
+
+        // Create handle from RGBA pixels
+        let (width, height) = rgba.dimensions();
+        let handle = iced::widget::image::Handle::from_rgba(
+            width,
+            height,
+            rgba.into_raw(),
+        );
+        
+        self.cache.insert(key, handle.clone());
+        Some(handle)
+    }
+    
+    /// Clear the cache (e.g., when images change)
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.cache.clear();
     }
 }
 
@@ -48,6 +123,21 @@ pub enum CanvasMessage {
     CanvasClicked(f32, f32),
     MouseMoved(f32, f32),
     MouseReleased,
+    /// Start resizing from a specific handle
+    StartResize(String, ResizeHandle),
+}
+
+/// Which resize handle is being dragged
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ResizeHandle {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
 /// The canvas widget for displaying and interacting with the layout
@@ -143,8 +233,8 @@ impl LayoutCanvas {
 
             let bounds = Rectangle::new(Point::new(x, y), Size::new(width, height));
 
-            // Try to draw actual image using Iced 0.13's draw_image
-            if let Some(handle) = image_cache.get_handle(&img.path) {
+            // Try to draw transformed image using Iced 0.13's draw_image
+            if let Some(handle) = image_cache.get_transformed_handle(img) {
                 let image = Image::new(handle);
                 frame.draw_image(bounds, image);
             } else {
@@ -171,21 +261,42 @@ impl LayoutCanvas {
                         .with_color(Color::from_rgb(0.0, 0.5, 1.0)),
                 );
 
-                // Draw resize handles
-                let handle_size = 8.0;
+                // Draw resize handles - corners (larger, square)
+                let corner_size = 10.0;
                 let corners = [
-                    (x, y),
-                    (x + width, y),
-                    (x, y + height),
-                    (x + width, y + height),
+                    (x, y),                           // TopLeft
+                    (x + width, y),                   // TopRight
+                    (x, y + height),                  // BottomLeft
+                    (x + width, y + height),          // BottomRight
                 ];
 
                 for (cx, cy) in corners.iter() {
                     let handle = Path::rectangle(
-                        Point::new(cx - handle_size / 2.0, cy - handle_size / 2.0),
-                        Size::new(handle_size, handle_size),
+                        Point::new(cx - corner_size / 2.0, cy - corner_size / 2.0),
+                        Size::new(corner_size, corner_size),
                     );
                     frame.fill(&handle, Color::from_rgb(0.0, 0.5, 1.0));
+                    frame.stroke(
+                        &handle,
+                        Stroke::default().with_width(1.0).with_color(Color::WHITE),
+                    );
+                }
+
+                // Draw edge handles (smaller, centered on edges)
+                let edge_size = 8.0;
+                let edges = [
+                    (x + width / 2.0, y),                  // Top
+                    (x + width / 2.0, y + height),         // Bottom
+                    (x, y + height / 2.0),                 // Left
+                    (x + width, y + height / 2.0),         // Right
+                ];
+
+                for (ex, ey) in edges.iter() {
+                    let handle = Path::rectangle(
+                        Point::new(ex - edge_size / 2.0, ey - edge_size / 2.0),
+                        Size::new(edge_size, edge_size),
+                    );
+                    frame.fill(&handle, Color::from_rgb(0.2, 0.6, 1.0));
                     frame.stroke(
                         &handle,
                         Stroke::default().with_width(1.0).with_color(Color::WHITE),
@@ -212,6 +323,50 @@ impl LayoutCanvas {
                 ..Default::default()
             });
         }
+    }
+
+    /// Check if a point (in pixels) is over a resize handle of the selected image
+    /// Returns the handle type if found
+    fn get_resize_handle_at_point(&self, px: f32, py: f32) -> Option<(String, ResizeHandle)> {
+        if let Some(id) = &self.layout.selected_image_id {
+            if let Some(img) = self.layout.get_image(id) {
+                let x = self.mm_to_pixels(img.x_mm);
+                let y = self.mm_to_pixels(img.y_mm);
+                let width = self.mm_to_pixels(img.width_mm);
+                let height = self.mm_to_pixels(img.height_mm);
+                
+                let handle_radius = 8.0; // Detection radius
+                
+                // Check corners first (they have priority)
+                let corners = [
+                    (x, y, ResizeHandle::TopLeft),
+                    (x + width, y, ResizeHandle::TopRight),
+                    (x, y + height, ResizeHandle::BottomLeft),
+                    (x + width, y + height, ResizeHandle::BottomRight),
+                ];
+                
+                for (cx, cy, handle) in corners.iter() {
+                    if (px - cx).abs() < handle_radius && (py - cy).abs() < handle_radius {
+                        return Some((id.clone(), *handle));
+                    }
+                }
+                
+                // Check edges
+                let edges = [
+                    (x + width / 2.0, y, ResizeHandle::Top),
+                    (x + width / 2.0, y + height, ResizeHandle::Bottom),
+                    (x, y + height / 2.0, ResizeHandle::Left),
+                    (x + width, y + height / 2.0, ResizeHandle::Right),
+                ];
+                
+                for (ex, ey, handle) in edges.iter() {
+                    if (px - ex).abs() < handle_radius && (py - ey).abs() < handle_radius {
+                        return Some((id.clone(), *handle));
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
@@ -243,6 +398,15 @@ impl Program<CanvasMessage> for LayoutCanvas {
         if let Some(cursor_position) = cursor.position_in(bounds) {
             match event {
                 canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                    // First check if we're clicking on a resize handle
+                    if let Some((id, handle)) = self.get_resize_handle_at_point(cursor_position.x, cursor_position.y) {
+                        return (
+                            iced::event::Status::Captured,
+                            Some(CanvasMessage::StartResize(id, handle)),
+                        );
+                    }
+                    
+                    // Otherwise check for image selection/move
                     let x_mm = self.pixels_to_mm(cursor_position.x);
                     let y_mm = self.pixels_to_mm(cursor_position.y);
 

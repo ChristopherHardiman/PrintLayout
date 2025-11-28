@@ -12,7 +12,7 @@ mod config;
 mod layout;
 mod printing;
 
-use canvas_widget::{CanvasMessage, LayoutCanvas};
+use canvas_widget::{CanvasMessage, LayoutCanvas, ResizeHandle};
 use config::{ConfigManager, ProjectLayout, UserPreferences};
 use layout::{Layout, PaperSize, PaperType, PlacedImage, PrintQuality, ColorMode, Orientation as LayoutOrientation};
 use printing::{discover_printers, execute_print_job, PrintJob, PrinterInfo};
@@ -36,6 +36,7 @@ pub enum SettingsTab {
     PrintSettings,
     Layout,
     ColorManagement,
+    ImageTools,
 }
 
 /// Print job status for progress dialog
@@ -74,6 +75,15 @@ pub enum Message {
     // Thumbnail operations
     ThumbnailClicked(String),
     ImageCopiesChanged(String, String),
+    // Image manipulation tools
+    RotateImageCW,           // Rotate 90° clockwise
+    RotateImageCCW,          // Rotate 90° counter-clockwise
+    FlipImageHorizontal,     // Mirror horizontally
+    FlipImageVertical,       // Flip vertically
+    ImageOpacityChanged(String),  // Change opacity (0-100%)
+    ImageWidthChanged(String),    // Resize width in mm
+    ImageHeightChanged(String),   // Resize height in mm
+    MaintainAspectRatio(bool),    // Toggle aspect ratio lock
     // Printing messages
     PrintersDiscovered(Vec<PrinterInfo>),
     PrinterSelected(String),
@@ -94,6 +104,14 @@ pub enum Message {
     AutoSaveTick,
 }
 
+/// Tracks what kind of drag operation is in progress
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DragMode {
+    None,
+    Move,
+    Resize(ResizeHandle),
+}
+
 struct PrintLayout {
     layout: Layout,
     canvas: LayoutCanvas,
@@ -103,9 +121,10 @@ struct PrintLayout {
     margin_left_input: String,
     margin_right_input: String,
     // Drag state
-    dragging: bool,
+    drag_mode: DragMode,
     drag_start_pos: (f32, f32),
     drag_image_initial_pos: (f32, f32),
+    drag_image_initial_size: (f32, f32),
     // Printing state
     printers: Vec<PrinterInfo>,
     selected_printer: Option<String>,
@@ -115,6 +134,11 @@ struct PrintLayout {
     // UI state
     settings_tab: SettingsTab,
     print_status: PrintStatus,
+    // Image manipulation state
+    image_width_input: String,
+    image_height_input: String,
+    image_opacity_input: String,
+    maintain_aspect_ratio: bool,
     // Config and file state
     config_manager: ConfigManager,
     preferences: UserPreferences,
@@ -177,9 +201,10 @@ impl PrintLayout {
             margin_bottom_input: margin_bottom.to_string(),
             margin_left_input: margin_left.to_string(),
             margin_right_input: margin_right.to_string(),
-            dragging: false,
+            drag_mode: DragMode::None,
             drag_start_pos: (0.0, 0.0),
             drag_image_initial_pos: (0.0, 0.0),
+            drag_image_initial_size: (0.0, 0.0),
             printers: Vec::new(),
             // Use printer from last print settings if available
             selected_printer: last_print.printer_name.clone().or(preferences.last_printer.clone()),
@@ -188,6 +213,11 @@ impl PrintLayout {
             copies_input: print_copies.to_string(),
             settings_tab: SettingsTab::PrintSettings,
             print_status: PrintStatus::Idle,
+            // Image manipulation defaults
+            image_width_input: String::new(),
+            image_height_input: String::new(),
+            image_opacity_input: "100".to_string(),
+            maintain_aspect_ratio: true,
             config_manager,
             preferences,
             current_file: None,
@@ -224,38 +254,162 @@ impl PrintLayout {
                     log::info!("Selected image: {}", id);
                     self.layout.selected_image_id = Some(id.clone());
                     if let Some(image) = self.layout.get_image(&id) {
-                        self.dragging = true;
+                        self.drag_mode = DragMode::Move;
                         self.drag_image_initial_pos = (image.x_mm, image.y_mm);
+                        self.drag_image_initial_size = (image.width_mm, image.height_mm);
+                        self.drag_start_pos = (0.0, 0.0);
+                        // Update input fields for the selected image
+                        self.image_width_input = format!("{:.1}", image.width_mm);
+                        self.image_height_input = format!("{:.1}", image.height_mm);
+                        self.image_opacity_input = format!("{:.0}", image.opacity * 100.0);
+                    }
+                    self.canvas.set_layout(self.layout.clone());
+                }
+                CanvasMessage::StartResize(id, handle) => {
+                    log::info!("Start resize: {} with handle {:?}", id, handle);
+                    self.layout.selected_image_id = Some(id.clone());
+                    if let Some(image) = self.layout.get_image(&id) {
+                        self.drag_mode = DragMode::Resize(handle);
+                        self.drag_image_initial_pos = (image.x_mm, image.y_mm);
+                        self.drag_image_initial_size = (image.width_mm, image.height_mm);
                         self.drag_start_pos = (0.0, 0.0);
                     }
                     self.canvas.set_layout(self.layout.clone());
                 }
                 CanvasMessage::DeselectAll => {
                     self.layout.selected_image_id = None;
-                    self.dragging = false;
+                    self.drag_mode = DragMode::None;
                     self.canvas.set_layout(self.layout.clone());
                 }
                 CanvasMessage::MouseMoved(x, y) => {
-                    if self.dragging {
-                        if let Some(id) = self.layout.selected_image_id.clone() {
-                            if self.drag_start_pos == (0.0, 0.0) {
-                                self.drag_start_pos = (x, y);
-                            }
-                            let dx = x - self.drag_start_pos.0;
-                            let dy = y - self.drag_start_pos.1;
-                            let new_x = self.drag_image_initial_pos.0 + dx;
-                            let new_y = self.drag_image_initial_pos.1 + dy;
-                            if let Some(image) = self.layout.get_image_mut(&id) {
-                                image.x_mm = new_x;
-                                image.y_mm = new_y;
-                                self.canvas.set_layout(self.layout.clone());
+                    match self.drag_mode {
+                        DragMode::Move => {
+                            if let Some(id) = self.layout.selected_image_id.clone() {
+                                if self.drag_start_pos == (0.0, 0.0) {
+                                    self.drag_start_pos = (x, y);
+                                }
+                                let dx = x - self.drag_start_pos.0;
+                                let dy = y - self.drag_start_pos.1;
+                                let new_x = self.drag_image_initial_pos.0 + dx;
+                                let new_y = self.drag_image_initial_pos.1 + dy;
+                                if let Some(image) = self.layout.get_image_mut(&id) {
+                                    image.x_mm = new_x;
+                                    image.y_mm = new_y;
+                                    self.canvas.set_layout(self.layout.clone());
+                                }
                             }
                         }
+                        DragMode::Resize(handle) => {
+                            if let Some(id) = self.layout.selected_image_id.clone() {
+                                if self.drag_start_pos == (0.0, 0.0) {
+                                    self.drag_start_pos = (x, y);
+                                }
+                                let dx = x - self.drag_start_pos.0;
+                                let dy = y - self.drag_start_pos.1;
+                                
+                                let (init_x, init_y) = self.drag_image_initial_pos;
+                                let (init_w, init_h) = self.drag_image_initial_size;
+                                let aspect_ratio = init_w / init_h;
+                                
+                                let (new_x, new_y, new_w, new_h) = match handle {
+                                    ResizeHandle::BottomRight => {
+                                        let new_w = (init_w + dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            (init_h + dy).max(10.0)
+                                        };
+                                        (init_x, init_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::BottomLeft => {
+                                        let new_w = (init_w - dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            (init_h + dy).max(10.0)
+                                        };
+                                        let new_x = init_x + init_w - new_w;
+                                        (new_x, init_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::TopRight => {
+                                        let new_w = (init_w + dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            (init_h - dy).max(10.0)
+                                        };
+                                        let new_y = init_y + init_h - new_h;
+                                        (init_x, new_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::TopLeft => {
+                                        let new_w = (init_w - dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            (init_h - dy).max(10.0)
+                                        };
+                                        let new_x = init_x + init_w - new_w;
+                                        let new_y = init_y + init_h - new_h;
+                                        (new_x, new_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::Right => {
+                                        let new_w = (init_w + dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            init_h
+                                        };
+                                        (init_x, init_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::Left => {
+                                        let new_w = (init_w - dx).max(10.0);
+                                        let new_h = if self.maintain_aspect_ratio {
+                                            new_w / aspect_ratio
+                                        } else {
+                                            init_h
+                                        };
+                                        let new_x = init_x + init_w - new_w;
+                                        (new_x, init_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::Bottom => {
+                                        let new_h = (init_h + dy).max(10.0);
+                                        let new_w = if self.maintain_aspect_ratio {
+                                            new_h * aspect_ratio
+                                        } else {
+                                            init_w
+                                        };
+                                        (init_x, init_y, new_w, new_h)
+                                    }
+                                    ResizeHandle::Top => {
+                                        let new_h = (init_h - dy).max(10.0);
+                                        let new_w = if self.maintain_aspect_ratio {
+                                            new_h * aspect_ratio
+                                        } else {
+                                            init_w
+                                        };
+                                        let new_y = init_y + init_h - new_h;
+                                        (init_x, new_y, new_w, new_h)
+                                    }
+                                };
+                                
+                                if let Some(image) = self.layout.get_image_mut(&id) {
+                                    image.x_mm = new_x;
+                                    image.y_mm = new_y;
+                                    image.width_mm = new_w;
+                                    image.height_mm = new_h;
+                                    // Update input fields live
+                                    self.image_width_input = format!("{:.1}", new_w);
+                                    self.image_height_input = format!("{:.1}", new_h);
+                                    self.canvas.set_layout(self.layout.clone());
+                                }
+                            }
+                        }
+                        DragMode::None => {}
                     }
                 }
                 CanvasMessage::MouseReleased => {
-                    if self.dragging {
-                        self.dragging = false;
+                    if self.drag_mode != DragMode::None {
+                        self.drag_mode = DragMode::None;
                         self.drag_start_pos = (0.0, 0.0);
                         self.is_modified = true;
                     }
@@ -433,11 +587,104 @@ impl PrintLayout {
                 }
             }
             Message::ThumbnailClicked(id) => {
-                self.layout.selected_image_id = Some(id);
+                self.layout.selected_image_id = Some(id.clone());
+                // Update the image input fields to reflect selected image
+                if let Some(img) = self.layout.get_image(&id) {
+                    self.image_width_input = format!("{:.1}", img.width_mm);
+                    self.image_height_input = format!("{:.1}", img.height_mm);
+                    self.image_opacity_input = format!("{:.0}", img.opacity * 100.0);
+                }
                 self.canvas.set_layout(self.layout.clone());
             }
             Message::ImageCopiesChanged(_id, _value) => {
                 // Per-image copies (future implementation)
+            }
+            // Image manipulation tools
+            Message::RotateImageCW => {
+                if let Some(img) = self.layout.selected_image_mut() {
+                    // Rotate 90° clockwise - swap width and height
+                    std::mem::swap(&mut img.width_mm, &mut img.height_mm);
+                    img.rotation_degrees = (img.rotation_degrees + 90.0) % 360.0;
+                    // Update input fields
+                    self.image_width_input = format!("{:.1}", img.width_mm);
+                    self.image_height_input = format!("{:.1}", img.height_mm);
+                    self.canvas.set_layout(self.layout.clone());
+                    self.is_modified = true;
+                }
+            }
+            Message::RotateImageCCW => {
+                if let Some(img) = self.layout.selected_image_mut() {
+                    // Rotate 90° counter-clockwise - swap width and height
+                    std::mem::swap(&mut img.width_mm, &mut img.height_mm);
+                    img.rotation_degrees = (img.rotation_degrees + 270.0) % 360.0;
+                    // Update input fields
+                    self.image_width_input = format!("{:.1}", img.width_mm);
+                    self.image_height_input = format!("{:.1}", img.height_mm);
+                    self.canvas.set_layout(self.layout.clone());
+                    self.is_modified = true;
+                }
+            }
+            Message::FlipImageHorizontal => {
+                if let Some(img) = self.layout.selected_image_mut() {
+                    img.flip_horizontal = !img.flip_horizontal;
+                    self.canvas.set_layout(self.layout.clone());
+                    self.is_modified = true;
+                }
+            }
+            Message::FlipImageVertical => {
+                if let Some(img) = self.layout.selected_image_mut() {
+                    img.flip_vertical = !img.flip_vertical;
+                    self.canvas.set_layout(self.layout.clone());
+                    self.is_modified = true;
+                }
+            }
+            Message::ImageOpacityChanged(value) => {
+                self.image_opacity_input = value.clone();
+                if let Ok(opacity) = value.parse::<f32>() {
+                    let clamped = (opacity / 100.0).clamp(0.0, 1.0);
+                    if let Some(img) = self.layout.selected_image_mut() {
+                        img.opacity = clamped;
+                        self.canvas.set_layout(self.layout.clone());
+                        self.is_modified = true;
+                    }
+                }
+            }
+            Message::ImageWidthChanged(value) => {
+                self.image_width_input = value.clone();
+                if let Ok(new_width) = value.parse::<f32>() {
+                    if new_width > 0.0 {
+                        if let Some(img) = self.layout.selected_image_mut() {
+                            if self.maintain_aspect_ratio {
+                                let aspect = img.original_height_px as f32 / img.original_width_px as f32;
+                                img.height_mm = new_width * aspect;
+                                self.image_height_input = format!("{:.1}", img.height_mm);
+                            }
+                            img.width_mm = new_width;
+                            self.canvas.set_layout(self.layout.clone());
+                            self.is_modified = true;
+                        }
+                    }
+                }
+            }
+            Message::ImageHeightChanged(value) => {
+                self.image_height_input = value.clone();
+                if let Ok(new_height) = value.parse::<f32>() {
+                    if new_height > 0.0 {
+                        if let Some(img) = self.layout.selected_image_mut() {
+                            if self.maintain_aspect_ratio {
+                                let aspect = img.original_width_px as f32 / img.original_height_px as f32;
+                                img.width_mm = new_height * aspect;
+                                self.image_width_input = format!("{:.1}", img.width_mm);
+                            }
+                            img.height_mm = new_height;
+                            self.canvas.set_layout(self.layout.clone());
+                            self.is_modified = true;
+                        }
+                    }
+                }
+            }
+            Message::MaintainAspectRatio(maintain) => {
+                self.maintain_aspect_ratio = maintain;
             }
             Message::NewLayout => {
                 self.layout = Layout::new();
@@ -769,21 +1016,28 @@ impl PrintLayout {
         // C: SETTINGS AREA (Right sidebar with tabs)
         // ====================================================================
         let tab_buttons = row![
-            button(text("Print").size(11))
+            button(text("Print").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::PrintSettings))
                 .style(if self.settings_tab == SettingsTab::PrintSettings { 
                     button::primary 
                 } else { 
                     button::secondary 
                 }),
-            button(text("Layout").size(11))
+            button(text("Layout").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::Layout))
                 .style(if self.settings_tab == SettingsTab::Layout { 
                     button::primary 
                 } else { 
                     button::secondary 
                 }),
-            button(text("Color").size(11))
+            button(text("Image").size(10))
+                .on_press(Message::SettingsTabChanged(SettingsTab::ImageTools))
+                .style(if self.settings_tab == SettingsTab::ImageTools { 
+                    button::primary 
+                } else { 
+                    button::secondary 
+                }),
+            button(text("Color").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::ColorManagement))
                 .style(if self.settings_tab == SettingsTab::ColorManagement { 
                     button::primary 
@@ -905,6 +1159,83 @@ impl PrintLayout {
                 ]
                 .spacing(8)
                 .into()
+            }
+            SettingsTab::ImageTools => {
+                // Image Tools Tab
+                if self.layout.selected_image_id.is_some() {
+                    let selected_img = self.layout.selected_image();
+                    let (rotation_text, flip_h, flip_v) = if let Some(img) = selected_img {
+                        (format!("{}°", img.rotation_degrees), img.flip_horizontal, img.flip_vertical)
+                    } else {
+                        ("0°".to_string(), false, false)
+                    };
+
+                    column![
+                        text("Rotation").size(12),
+                        row![
+                            text(format!("Current: {}", rotation_text)).size(10),
+                        ],
+                        row![
+                            button(text("↺ 90°").size(10))
+                                .on_press(Message::RotateImageCCW)
+                                .padding(5),
+                            button(text("↻ 90°").size(10))
+                                .on_press(Message::RotateImageCW)
+                                .padding(5),
+                        ]
+                        .spacing(5),
+                        Space::with_height(Length::Fixed(10.0)),
+                        text("Flip").size(12),
+                        row![
+                            button(text(if flip_h { "↔ H ✓" } else { "↔ H" }).size(10))
+                                .on_press(Message::FlipImageHorizontal)
+                                .style(if flip_h { button::primary } else { button::secondary })
+                                .padding(5),
+                            button(text(if flip_v { "↕ V ✓" } else { "↕ V" }).size(10))
+                                .on_press(Message::FlipImageVertical)
+                                .style(if flip_v { button::primary } else { button::secondary })
+                                .padding(5),
+                        ]
+                        .spacing(5),
+                        Space::with_height(Length::Fixed(10.0)),
+                        text("Size (mm)").size(12),
+                        row![
+                            text("W:").size(10).width(Length::Fixed(20.0)),
+                            text_input("0", &self.image_width_input)
+                                .on_input(Message::ImageWidthChanged)
+                                .width(Length::Fixed(55.0)),
+                            text("H:").size(10).width(Length::Fixed(20.0)),
+                            text_input("0", &self.image_height_input)
+                                .on_input(Message::ImageHeightChanged)
+                                .width(Length::Fixed(55.0)),
+                        ]
+                        .spacing(3)
+                        .align_y(Alignment::Center),
+                        checkbox("Maintain aspect ratio", self.maintain_aspect_ratio)
+                            .on_toggle(Message::MaintainAspectRatio)
+                            .size(14),
+                        Space::with_height(Length::Fixed(10.0)),
+                        text("Opacity").size(12),
+                        row![
+                            text_input("100", &self.image_opacity_input)
+                                .on_input(Message::ImageOpacityChanged)
+                                .width(Length::Fixed(50.0)),
+                            text("%").size(10),
+                        ]
+                        .spacing(3)
+                        .align_y(Alignment::Center),
+                    ]
+                    .spacing(5)
+                    .into()
+                } else {
+                    column![
+                        text("No Image Selected").size(12),
+                        Space::with_height(Length::Fixed(10.0)),
+                        text("Select an image from the\nthumbnails below to edit\nits properties.").size(10),
+                    ]
+                    .spacing(5)
+                    .into()
+                }
             }
         };
 

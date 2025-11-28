@@ -339,6 +339,19 @@ pub struct PlacedImage {
     pub original_width_px: u32,
     pub original_height_px: u32,
     pub locked: bool,
+    /// Horizontal flip (mirror)
+    #[serde(default)]
+    pub flip_horizontal: bool,
+    /// Vertical flip
+    #[serde(default)]
+    pub flip_vertical: bool,
+    /// Opacity (0.0 = transparent, 1.0 = fully opaque)
+    #[serde(default = "default_opacity")]
+    pub opacity: f32,
+}
+
+fn default_opacity() -> f32 {
+    1.0
 }
 
 #[allow(dead_code)]
@@ -363,6 +376,9 @@ impl PlacedImage {
             original_width_px,
             original_height_px,
             locked: false,
+            flip_horizontal: false,
+            flip_vertical: false,
+            opacity: 1.0,
         }
     }
 

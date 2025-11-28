@@ -195,6 +195,29 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
             }
         };
 
+        // Apply rotation (rotation_degrees is in 90° increments)
+        let rotation_normalized = ((placed_image.rotation_degrees % 360.0) + 360.0) % 360.0;
+        let rotated = if rotation_normalized >= 85.0 && rotation_normalized <= 95.0 {
+            source_img.rotate90()
+        } else if rotation_normalized >= 175.0 && rotation_normalized <= 185.0 {
+            source_img.rotate180()
+        } else if rotation_normalized >= 265.0 && rotation_normalized <= 275.0 {
+            source_img.rotate270()
+        } else {
+            source_img // 0 or other values = no rotation
+        };
+
+        // Apply flip transforms
+        let flipped = if placed_image.flip_horizontal && placed_image.flip_vertical {
+            rotated.fliph().flipv()
+        } else if placed_image.flip_horizontal {
+            rotated.fliph()
+        } else if placed_image.flip_vertical {
+            rotated.flipv()
+        } else {
+            rotated
+        };
+
         // Calculate position and size in pixels
         let x_px = ((placed_image.x_mm / 25.4) * dpi as f32) as u32;
         let y_px = ((placed_image.y_mm / 25.4) * dpi as f32) as u32;
@@ -202,18 +225,31 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
         let h_px = ((placed_image.height_mm / 25.4) * dpi as f32) as u32;
 
         // Resize source image to target dimensions
-        let resized = source_img.resize_exact(w_px, h_px, image::imageops::FilterType::Lanczos3);
+        let resized = flipped.resize_exact(w_px, h_px, image::imageops::FilterType::Lanczos3);
+
+        // Convert to RGBA and apply opacity
+        let mut rgba_img = resized.to_rgba8();
+        if placed_image.opacity < 1.0 {
+            let opacity_factor = placed_image.opacity.clamp(0.0, 1.0);
+            for pixel in rgba_img.pixels_mut() {
+                pixel[3] = (pixel[3] as f32 * opacity_factor) as u8;
+            }
+        }
 
         // Composite onto canvas
-        image::imageops::overlay(&mut img, &resized.to_rgba8(), x_px.into(), y_px.into());
+        image::imageops::overlay(&mut img, &rgba_img, x_px.into(), y_px.into());
 
         log::debug!(
-            "Rendered image {} at ({}, {}) with size {}x{} px",
+            "Rendered image {} at ({}, {}) with size {}x{} px, rotation={}°, flip_h={}, flip_v={}, opacity={}",
             placed_image.id,
             x_px,
             y_px,
             w_px,
-            h_px
+            h_px,
+            placed_image.rotation_degrees,
+            placed_image.flip_horizontal,
+            placed_image.flip_vertical,
+            placed_image.opacity
         );
     }
 
