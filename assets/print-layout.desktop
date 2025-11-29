@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Print Layout
+GenericName=Print Layout Editor
+Comment=Create professional page layouts with multiple images for printing
+Exec=print-layout %F
+Icon=print-layout
+Terminal=false
+Categories=Graphics;Photography;Publishing;
+Keywords=print;layout;photo;image;design;poster;
+MimeType=application/x-print-layout;image/png;image/jpeg;image/gif;image/bmp;image/webp;
+StartupNotify=true
+StartupWMClass=print-layout
+
+Actions=NewLayout;
+
+[Desktop Action NewLayout]
+Name=New Layout
+Exec=print-layout --new

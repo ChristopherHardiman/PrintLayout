@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#2196F3"/>
+  
+  <!-- Page/document shape -->
+  <rect x="60" y="40" width="136" height="176" rx="8" ry="8" fill="white" stroke="#1565C0" stroke-width="4"/>
+  
+  <!-- Image placeholder 1 (top-left) -->
+  <rect x="76" y="60" width="48" height="36" rx="4" ry="4" fill="#4CAF50"/>
+  
+  <!-- Image placeholder 2 (top-right) -->
+  <rect x="132" y="60" width="48" height="36" rx="4" ry="4" fill="#FF9800"/>
+  
+  <!-- Image placeholder 3 (bottom, larger) -->
+  <rect x="76" y="108" width="104" height="72" rx="4" ry="4" fill="#9C27B0"/>
+  
+  <!-- Selection handles on bottom image -->
+  <rect x="72" y="104" width="8" height="8" fill="#2196F3" stroke="white" stroke-width="1"/>
+  <rect x="176" y="104" width="8" height="8" fill="#2196F3" stroke="white" stroke-width="1"/>
+  <rect x="72" y="176" width="8" height="8" fill="#2196F3" stroke="white" stroke-width="1"/>
+  <rect x="176" y="176" width="8" height="8" fill="#2196F3" stroke="white" stroke-width="1"/>
+  
+  <!-- Printer icon at bottom -->
+  <g transform="translate(100, 188)">
+    <!-- Printer body -->
+    <rect x="0" y="10" width="56" height="28" rx="4" ry="4" fill="#424242"/>
+    <!-- Paper tray -->
+    <rect x="8" y="0" width="40" height="14" rx="2" ry="2" fill="#757575"/>
+    <!-- Paper output -->
+    <rect x="12" y="34" width="32" height="8" rx="1" ry="1" fill="white"/>
+    <!-- Status light -->
+    <circle cx="48" cy="24" r="4" fill="#4CAF50"/>
+  </g>
+</svg>

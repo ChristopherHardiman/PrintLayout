@@ -6,6 +6,23 @@ authors = ["Christopher Hardiman"]
 description = "Lightweight cross-desktop GUI for creating print layouts"
 license = "Apache-2.0"
 repository = "https://github.com/ChristopherHardiman/PrintLayout"
+homepage = "https://github.com/ChristopherHardiman/PrintLayout"
+documentation = "https://github.com/ChristopherHardiman/PrintLayout#readme"
+readme = "README.md"
+keywords = ["printing", "layout", "photo", "gui", "linux"]
+categories = ["multimedia::images", "gui"]
+rust-version = "1.75"
+exclude = [
+    "packaging/*",
+    "assets/*",
+    ".github/*",
+    "*.md",
+    "!README.md",
+]
+
+[[bin]]
+name = "print-layout"
+path = "src/main.rs"
 
 [dependencies]
 iced = { version = "0.13", features = ["canvas", "image", "tokio", "debug"] }
@@ -19,3 +36,19 @@ env_logger = "0.11"
 directories = "5.0"
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+strip = false
