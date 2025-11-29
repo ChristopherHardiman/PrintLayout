@@ -5,7 +5,7 @@ Summary:        Lightweight cross-desktop GUI for creating print layouts
 
 License:        Apache-2.0
 URL:            https://github.com/ChristopherHardiman/PrintLayout
-Source0:        %{name}-%{version}.tar.gz
+Source0:        https://github.com/ChristopherHardiman/PrintLayout/archive/refs/tags/v%{version}.tar.gz#/PrintLayout-%{version}.tar.gz
 
 BuildRequires:  rust >= 1.75
 BuildRequires:  cargo
@@ -34,7 +34,7 @@ Features include:
 - Auto-save and project backup system
 
 %prep
-%autosetup -n %{name}-%{version}
+%autosetup -n PrintLayout-%{version}
 
 %build
 cargo build --release
@@ -81,7 +81,7 @@ fi
 %{_datadir}/licenses/%{name}/LICENSE
 
 %changelog
-* Thu Nov 28 2024 Christopher Hardiman <chris@example.com> - 0.1.0-1
+* Thu Nov 28 2024 Christopher Hardiman <christopher.m.hardiman@gmail.com> - 0.1.0-1
 - Initial release
 - Image management with drag-and-drop positioning
 - Drag-to-resize with 8 handles (corners and edges)
