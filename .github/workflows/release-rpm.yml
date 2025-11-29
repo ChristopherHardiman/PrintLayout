@@ -1,0 +1,133 @@
+name: Build and Release RPM
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-rpm:
+    name: Build RPM
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    
+    steps:
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            git \
+            rpm-build \
+            rpmdevtools \
+            rust \
+            cargo \
+            cups-devel \
+            libxkbcommon-devel \
+            wayland-devel \
+            libX11-devel
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup RPM build environment
+        run: |
+          rpmdev-setuptree
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Extract version from tag (remove 'v' prefix)
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create source tarball
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p ~/rpmbuild/SOURCES
+          tar --transform "s,^,PrintLayout-${VERSION}/," \
+              -czvf ~/rpmbuild/SOURCES/v${VERSION}.tar.gz \
+              --exclude='.git' \
+              --exclude='target' \
+              --exclude='*.rpm' \
+              .
+
+      - name: Update spec version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^Version:.*/Version:        ${VERSION}/" packaging/rpm/print-layout.spec
+
+      - name: Build RPM
+        run: |
+          rpmbuild -ba packaging/rpm/print-layout.spec
+
+      - name: List built RPMs
+        run: |
+          ls -la ~/rpmbuild/RPMS/x86_64/
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-layout-rpm
+          path: ~/rpmbuild/RPMS/x86_64/print-layout-*.rpm
+          if-no-files-found: error
+
+      - name: Upload SRPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-layout-srpm
+          path: ~/rpmbuild/SRPMS/print-layout-*.rpm
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build-rpm
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: print-layout-rpm
+          path: ./rpms
+
+      - name: Download SRPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: print-layout-srpm
+          path: ./srpms
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Print Layout v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ./rpms/*.rpm
+            ./srpms/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
