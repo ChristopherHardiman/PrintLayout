@@ -18,7 +18,7 @@ This document provides detailed instructions for installing Print Layout on vari
 
 ### Runtime Dependencies
 - **CUPS** - Required for printing functionality
-- **GTK3** - Required for file dialogs
+- **xdg-desktop-portal** - Required for native file dialogs
 - **libxkbcommon** - Required for keyboard input
 
 ## Installation Methods
@@ -28,7 +28,7 @@ This document provides detailed instructions for installing Print Layout on vari
 #### From COPR Repository (Recommended)
 ```bash
 # Enable the COPR repository
-sudo dnf copr enable christopherhardiman/print-layout
+sudo dnf copr enable chrismhardiman/print-layout
 
 # Install Print Layout
 sudo dnf install print-layout
@@ -37,10 +37,10 @@ sudo dnf install print-layout
 #### Manual RPM Installation
 ```bash
 # Download the RPM package from releases
-wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.1.0/print-layout-0.1.0-1.fc39.x86_64.rpm
+wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.1.0/print-layout-0.1.0-1.fc43.x86_64.rpm
 
 # Install with dnf
-sudo dnf install ./print-layout-0.1.0-1.fc39.x86_64.rpm
+sudo dnf install ./print-layout-0.1.0-1.fc43.x86_64.rpm
 ```
 
 ### Method 2: AppImage (Universal Linux)
@@ -79,20 +79,20 @@ EOF
 
 ##### Fedora / RHEL / CentOS Stream
 ```bash
-sudo dnf install rust cargo cups-devel gtk3-devel libxkbcommon-devel \
+sudo dnf install rust cargo cups-devel libxkbcommon-devel \
     wayland-devel libX11-devel git
 ```
 
 ##### Ubuntu / Debian
 ```bash
 sudo apt update
-sudo apt install rustc cargo libcups2-dev libgtk-3-dev libxkbcommon-dev \
+sudo apt install rustc cargo libcups2-dev libxkbcommon-dev \
     libwayland-dev libx11-dev git build-essential
 ```
 
 ##### Arch Linux
 ```bash
-sudo pacman -S rust cups gtk3 libxkbcommon wayland libx11 git base-devel
+sudo pacman -S rust cups xdg-desktop-portal libxkbcommon wayland libx11 git base-devel
 ```
 
 #### Build Steps
@@ -122,7 +122,7 @@ sudo install -m 644 assets/print-layout.desktop /usr/share/applications/
 sudo install -m 644 assets/icons/print-layout.svg /usr/share/icons/hicolor/scalable/apps/
 
 # Update icon cache
-sudo gtk-update-icon-cache /usr/share/icons/hicolor/
+sudo touch /usr/share/icons/hicolor
 ```
 
 ## Verifying Installation
@@ -195,14 +195,14 @@ You can also search for "Print Layout" in your desktop environment's application
 
 ### File Dialog Not Opening
 
-This usually indicates a missing GTK3 dependency:
+This usually indicates a missing xdg-desktop-portal dependency:
 
 ```bash
 # Fedora
-sudo dnf install gtk3
+sudo dnf install xdg-desktop-portal xdg-desktop-portal-gtk
 
 # Ubuntu/Debian
-sudo apt install libgtk-3-0
+sudo apt install xdg-desktop-portal xdg-desktop-portal-gtk
 ```
 
 ### Wayland Issues

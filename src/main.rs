@@ -1070,18 +1070,18 @@ impl PrintLayout {
         // D: TOOLS AREA (Toolbar with zoom, orientation, add/delete)
         // ====================================================================
         let delete_button = if self.layout.selected_image_id.is_some() {
-            button(row![text("✕").size(14), text(" Delete").size(12)].align_y(Alignment::Center))
+            button(row![text("X").size(14), text(" Delete").size(12)].align_y(Alignment::Center))
                 .on_press(Message::DeleteImageClicked)
         } else {
-            button(row![text("✕").size(14), text(" Delete").size(12)].align_y(Alignment::Center))
+            button(row![text("X").size(14), text(" Delete").size(12)].align_y(Alignment::Center))
         };
 
         let orientation_btn = match self.layout.page.orientation {
             LayoutOrientation::Portrait => button(
-                row![text("▯").size(16), text(" Portrait").size(12)].align_y(Alignment::Center)
+                row![text("|").size(16), text(" Portrait").size(12)].align_y(Alignment::Center)
             ).on_press(Message::OrientationToggled),
             LayoutOrientation::Landscape => button(
-                row![text("▭").size(16), text(" Landscape").size(12)].align_y(Alignment::Center)
+                row![text("—").size(16), text(" Landscape").size(12)].align_y(Alignment::Center)
             ).on_press(Message::OrientationToggled),
         };
 

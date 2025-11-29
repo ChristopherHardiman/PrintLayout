@@ -1178,8 +1178,8 @@ This document outlines the detailed steps to implement the Print Layout applicat
     *   **Fedora/RHEL RPM Package**
         - Create `print-layout.spec` file with:
             - Package metadata (Name, Version, Release, Summary, License)
-            - BuildRequires: rust, cargo, cups-devel, gtk3-devel
-            - Requires: cups, gtk3
+            - BuildRequires: rust, cargo, cups-devel
+            - Requires: cups, xdg-desktop-portal
             - %description section with full package description
             - %prep, %build, %install, %files sections
         - Use `rpmbuild` or `mock` for building:
@@ -1201,7 +1201,7 @@ This document outlines the detailed steps to implement the Print Layout applicat
             - CentOS Stream 9
         - Specify runtime dependencies:
             - cups (for printing)
-            - gtk3 (for file dialogs via rfd)
+            - xdg-desktop-portal (for file dialogs via rfd)
             - libxkbcommon (for keyboard handling)
         - Include in package:
             - Binary: /usr/bin/print-layout

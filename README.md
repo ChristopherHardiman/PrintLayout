@@ -60,7 +60,7 @@ See [INSTALL.md](INSTALL.md) for detailed build instructions.
 
 ```bash
 # Install dependencies (Fedora)
-sudo dnf install rust cargo cups-devel gtk3-devel libxkbcommon-devel
+sudo dnf install rust cargo cups-devel libxkbcommon-devel
 
 # Clone and build
 git clone https://github.com/ChristopherHardiman/PrintLayout.git
@@ -111,7 +111,7 @@ chmod +x print-layout-*.AppImage
 - **CPU**: x86_64 or ARM64
 - **RAM**: 512 MB minimum, 2 GB recommended
 - **Disk**: 50 MB for application, additional space for layouts
-- **Dependencies**: CUPS (for printing), GTK3 (for file dialogs)
+- **Dependencies**: CUPS (for printing), xdg-desktop-portal (for file dialogs)
 
 ## 📁 File Locations
 

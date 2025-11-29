@@ -7,16 +7,15 @@ License:        Apache-2.0
 URL:            https://github.com/ChristopherHardiman/PrintLayout
 Source0:        %{name}-%{version}.tar.gz
 
-BuildRequires:  rust >= 1.70
+BuildRequires:  rust >= 1.75
 BuildRequires:  cargo
 BuildRequires:  cups-devel
-BuildRequires:  gtk3-devel
 BuildRequires:  libxkbcommon-devel
 BuildRequires:  wayland-devel
 BuildRequires:  libX11-devel
 
 Requires:       cups
-Requires:       gtk3
+Requires:       xdg-desktop-portal
 Requires:       libxkbcommon
 
 %description
@@ -63,13 +62,14 @@ install -m 0644 LICENSE %{buildroot}%{_datadir}/licenses/%{name}/LICENSE
 
 %post
 # Update icon cache
-/usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+/usr/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
 # Update desktop database
 /usr/bin/update-desktop-database &>/dev/null || :
 
 %postun
-# Update icon cache
-/usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+if [ $1 -eq 0 ]; then
+    /usr/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
+fi
 # Update desktop database
 /usr/bin/update-desktop-database &>/dev/null || :
 
