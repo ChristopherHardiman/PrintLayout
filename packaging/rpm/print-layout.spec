@@ -1,5 +1,5 @@
 Name:           print-layout
-Version:        0.1.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        Lightweight cross-desktop GUI for creating print layouts
 
@@ -81,6 +81,11 @@ fi
 %{_datadir}/licenses/%{name}/LICENSE
 
 %changelog
+* Wed Dec 03 2025 Christopher Hardiman <christopher.m.hardiman@gmail.com> - 0.2.0-1
+- Version 0.2.0 release
+- GitHub Actions workflow for automated RPM builds
+- Documentation updates
+
 * Thu Nov 28 2024 Christopher Hardiman <christopher.m.hardiman@gmail.com> - 0.1.0-1
 - Initial release
 - Image management with drag-and-drop positioning

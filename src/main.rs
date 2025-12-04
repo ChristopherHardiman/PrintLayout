@@ -15,8 +15,8 @@ mod printing;
 
 use canvas_widget::{CanvasMessage, LayoutCanvas, ResizeHandle};
 use config::{ConfigManager, ProjectLayout, UserPreferences};
-use layout::{Layout, PaperSize, PaperType, PlacedImage, PrintQuality, ColorMode, Orientation as LayoutOrientation};
-use printing::{discover_printers, execute_print_job, PrintJob, PrinterInfo};
+use layout::{Layout, PaperSize, PaperType, PlacedImage, PrintQuality, Orientation as LayoutOrientation};
+use printing::{discover_printers, execute_print_job, get_printer_capabilities, PrintJob, PrinterInfo, PrinterCapabilities};
 
 pub fn main() -> iced::Result {
     env_logger::init();
@@ -36,7 +36,6 @@ pub enum SettingsTab {
     #[default]
     PrintSettings,
     Layout,
-    ColorManagement,
     ImageTools,
 }
 
@@ -69,7 +68,6 @@ pub enum Message {
     // New settings messages
     SettingsTabChanged(SettingsTab),
     PrintQualitySelected(PrintQuality),
-    ColorModeSelected(ColorMode),
     OrientationToggled,
     BorderlessToggled(bool),
     CopiesChanged(String),
@@ -88,6 +86,11 @@ pub enum Message {
     // Printing messages
     PrintersDiscovered(Vec<PrinterInfo>),
     PrinterSelected(String),
+    PrinterCapabilitiesLoaded(PrinterCapabilities),
+    InputSlotSelected(String),
+    CupsMediaTypeSelected(String),
+    CupsColorModelSelected(String),
+    CupsPrintQualitySelected(String),
     PrintClicked,
     PrintJobCompleted(Result<String, String>),
     DismissPrintStatus,
@@ -132,6 +135,11 @@ struct PrintLayout {
     // Printing state
     printers: Vec<PrinterInfo>,
     selected_printer: Option<String>,
+    printer_capabilities: Option<PrinterCapabilities>,
+    selected_input_slot: Option<String>,
+    selected_cups_media_type: Option<String>,
+    selected_cups_color_model: Option<String>,
+    selected_cups_print_quality: Option<String>,
     print_copies: u32,
     print_dpi: u32,
     copies_input: String,
@@ -172,6 +180,10 @@ impl PrintLayout {
         let last_print = &preferences.last_print_settings;
         if let Some(paper_size) = last_print.paper_size {
             layout.page.paper_size = paper_size;
+            // Get the paper dimensions
+            let (width, height) = paper_size.to_dimensions();
+            layout.page.width_mm = width;
+            layout.page.height_mm = height;
         }
         if let Some(paper_type) = last_print.paper_type {
             layout.page.paper_type = paper_type;
@@ -184,6 +196,10 @@ impl PrintLayout {
         }
         if let Some(orientation) = last_print.orientation {
             layout.page.orientation = orientation;
+            // If landscape, swap the dimensions
+            if orientation == LayoutOrientation::Landscape {
+                std::mem::swap(&mut layout.page.width_mm, &mut layout.page.height_mm);
+            }
         }
         if let Some(borderless) = last_print.borderless {
             layout.page.borderless = borderless;
@@ -222,6 +238,11 @@ impl PrintLayout {
             printers: Vec::new(),
             // Use printer from last print settings if available
             selected_printer: last_print.printer_name.clone().or(preferences.last_printer.clone()),
+            printer_capabilities: None,
+            selected_input_slot: None,
+            selected_cups_media_type: None,
+            selected_cups_color_model: None,
+            selected_cups_print_quality: None,
             print_copies,
             print_dpi: 300,
             copies_input: print_copies.to_string(),
@@ -497,8 +518,15 @@ impl PrintLayout {
             }
             Message::PaperSizeSelected(paper_size) => {
                 let (width, height) = paper_size.to_dimensions();
-                self.layout.page.width_mm = width;
-                self.layout.page.height_mm = height;
+                // Preserve current orientation when changing paper size
+                if self.layout.page.orientation == LayoutOrientation::Landscape {
+                    // For landscape, swap width and height
+                    self.layout.page.width_mm = height;
+                    self.layout.page.height_mm = width;
+                } else {
+                    self.layout.page.width_mm = width;
+                    self.layout.page.height_mm = height;
+                }
                 self.layout.page.paper_size = paper_size;
                 self.canvas.set_layout(self.layout.clone());
                 self.is_modified = true;
@@ -570,10 +598,6 @@ impl PrintLayout {
             }
             Message::PrintQualitySelected(quality) => {
                 self.layout.page.print_quality = quality;
-                self.is_modified = true;
-            }
-            Message::ColorModeSelected(mode) => {
-                self.layout.page.color_mode = mode;
                 self.is_modified = true;
             }
             Message::OrientationToggled => {
@@ -732,14 +756,68 @@ impl PrintLayout {
             }
             Message::PrintersDiscovered(printers) => {
                 self.printers = printers;
-                if let Some(default_printer) = self.printers.iter().find(|p| p.is_default) {
-                    self.selected_printer = Some(default_printer.name.clone());
+                let printer_to_select = if let Some(default_printer) = self.printers.iter().find(|p| p.is_default) {
+                    Some(default_printer.name.clone())
                 } else if let Some(first_printer) = self.printers.first() {
-                    self.selected_printer = Some(first_printer.name.clone());
+                    Some(first_printer.name.clone())
+                } else {
+                    None
+                };
+                
+                if let Some(printer_name) = printer_to_select {
+                    self.selected_printer = Some(printer_name.clone());
+                    // Load capabilities for the selected printer
+                    return Task::perform(
+                        async move {
+                            get_printer_capabilities(&printer_name).unwrap_or_default()
+                        },
+                        Message::PrinterCapabilitiesLoaded,
+                    );
                 }
             }
             Message::PrinterSelected(printer_name) => {
-                self.selected_printer = Some(printer_name);
+                self.selected_printer = Some(printer_name.clone());
+                // Reset selections when printer changes
+                self.selected_input_slot = None;
+                self.selected_cups_media_type = None;
+                self.selected_cups_color_model = None;
+                self.selected_cups_print_quality = None;
+                // Load capabilities for the new printer
+                return Task::perform(
+                    async move {
+                        get_printer_capabilities(&printer_name).unwrap_or_default()
+                    },
+                    Message::PrinterCapabilitiesLoaded,
+                );
+            }
+            Message::PrinterCapabilitiesLoaded(caps) => {
+                log::info!("Loaded {} options for printer '{}'", caps.options.len(), caps.printer_name);
+                // Set defaults from CUPS
+                if let Some(input_slot) = caps.input_slot() {
+                    self.selected_input_slot = input_slot.current_value().map(String::from);
+                }
+                if let Some(media_type) = caps.media_type() {
+                    self.selected_cups_media_type = media_type.current_value().map(String::from);
+                }
+                if let Some(color_model) = caps.color_model() {
+                    self.selected_cups_color_model = color_model.current_value().map(String::from);
+                }
+                if let Some(print_quality) = caps.print_quality() {
+                    self.selected_cups_print_quality = print_quality.current_value().map(String::from);
+                }
+                self.printer_capabilities = Some(caps);
+            }
+            Message::InputSlotSelected(value) => {
+                self.selected_input_slot = Some(value);
+            }
+            Message::CupsMediaTypeSelected(value) => {
+                self.selected_cups_media_type = Some(value);
+            }
+            Message::CupsColorModelSelected(value) => {
+                self.selected_cups_color_model = Some(value);
+            }
+            Message::CupsPrintQualitySelected(value) => {
+                self.selected_cups_print_quality = Some(value);
             }
             Message::PrintClicked => {
                 if self.layout.images.is_empty() {
@@ -753,11 +831,27 @@ impl PrintLayout {
                 // Set status to rendering
                 self.print_status = PrintStatus::Rendering;
                 
+                // Build extra options from CUPS selections
+                let mut extra_options = Vec::new();
+                if let Some(ref slot) = self.selected_input_slot {
+                    extra_options.push(("InputSlot".to_string(), slot.clone()));
+                }
+                if let Some(ref media_type) = self.selected_cups_media_type {
+                    extra_options.push(("MediaType".to_string(), media_type.clone()));
+                }
+                if let Some(ref color_model) = self.selected_cups_color_model {
+                    extra_options.push(("ColorModel".to_string(), color_model.clone()));
+                }
+                if let Some(ref quality) = self.selected_cups_print_quality {
+                    extra_options.push(("cupsPrintQuality".to_string(), quality.clone()));
+                }
+                
                 let job = PrintJob {
                     layout: self.layout.clone(),
                     printer_name,
                     copies: self.print_copies,
                     dpi: self.print_dpi,
+                    extra_options,
                 };
                 return Task::perform(
                     async move {
@@ -1127,19 +1221,15 @@ impl PrintLayout {
                 } else { 
                     button::secondary 
                 }),
-            button(text("Color").size(10))
-                .on_press(Message::SettingsTabChanged(SettingsTab::ColorManagement))
-                .style(if self.settings_tab == SettingsTab::ColorManagement { 
-                    button::primary 
-                } else { 
-                    button::secondary 
-                }),
         ]
         .spacing(2);
 
         let settings_content: Element<'_, Message> = match self.settings_tab {
             SettingsTab::PrintSettings => {
-                // Print Settings Tab
+                // Print Settings Tab - use CUPS options when available
+                let mut content = column![].spacing(5);
+                
+                // Paper Size (always show our built-in sizes for layout)
                 let paper_sizes = vec![
                     PaperSize::Photo3_5x5, PaperSize::Photo4x6, PaperSize::Photo5x5,
                     PaperSize::Photo5x7, PaperSize::Photo7x10, PaperSize::Photo8x10,
@@ -1148,35 +1238,93 @@ impl PrintLayout {
                     PaperSize::Panorama, PaperSize::A3, PaperSize::A4, PaperSize::A5,
                     PaperSize::Tabloid, PaperSize::Ledger,
                 ];
-
-                let paper_types = vec![
-                    PaperType::Plain, PaperType::SuperHighGloss, PaperType::Glossy,
-                    PaperType::SemiGloss, PaperType::Matte, PaperType::FineArt,
-                ];
-
-                let print_qualities = vec![
-                    PrintQuality::Highest, PrintQuality::High,
-                    PrintQuality::Standard, PrintQuality::Draft,
-                ];
-
-                column![
-                    text("Media Type").size(12),
-                    pick_list(paper_types, Some(self.layout.page.paper_type), Message::PaperTypeSelected)
-                        .width(Length::Fill),
-                    Space::with_height(Length::Fixed(10.0)),
-                    text("Paper Size").size(12),
-                    pick_list(paper_sizes, Some(self.layout.page.paper_size), Message::PaperSizeSelected)
-                        .width(Length::Fill),
-                    Space::with_height(Length::Fixed(10.0)),
-                    checkbox("Borderless Printing", self.layout.page.borderless)
-                        .on_toggle(Message::BorderlessToggled),
-                    Space::with_height(Length::Fixed(10.0)),
-                    text("Print Quality").size(12),
-                    pick_list(print_qualities, Some(self.layout.page.print_quality), Message::PrintQualitySelected)
-                        .width(Length::Fill),
-                ]
-                .spacing(5)
-                .into()
+                content = content
+                    .push(text("Paper Size").size(12))
+                    .push(pick_list(paper_sizes, Some(self.layout.page.paper_size), Message::PaperSizeSelected)
+                        .width(Length::Fill))
+                    .push(Space::with_height(Length::Fixed(8.0)));
+                
+                // Borderless option
+                content = content
+                    .push(checkbox("Borderless Printing", self.layout.page.borderless)
+                        .on_toggle(Message::BorderlessToggled))
+                    .push(Space::with_height(Length::Fixed(8.0)));
+                
+                // CUPS-specific options (if available)
+                if let Some(ref caps) = self.printer_capabilities {
+                    content = content
+                        .push(horizontal_rule(1))
+                        .push(text("Printer Options").size(12))
+                        .push(Space::with_height(Length::Fixed(5.0)));
+                    
+                    // Media Source (InputSlot)
+                    if let Some(input_slot) = caps.input_slot() {
+                        let values: Vec<String> = input_slot.values.iter().map(|v| v.value.clone()).collect();
+                        if !values.is_empty() {
+                            content = content
+                                .push(text(&input_slot.display_name).size(11))
+                                .push(pick_list(values, self.selected_input_slot.clone(), Message::InputSlotSelected)
+                                    .width(Length::Fill))
+                                .push(Space::with_height(Length::Fixed(5.0)));
+                        }
+                    }
+                    
+                    // Media Type from CUPS
+                    if let Some(media_type) = caps.media_type() {
+                        let values: Vec<String> = media_type.values.iter().map(|v| v.value.clone()).collect();
+                        if !values.is_empty() {
+                            content = content
+                                .push(text(&media_type.display_name).size(11))
+                                .push(pick_list(values, self.selected_cups_media_type.clone(), Message::CupsMediaTypeSelected)
+                                    .width(Length::Fill))
+                                .push(Space::with_height(Length::Fixed(5.0)));
+                        }
+                    }
+                    
+                    // Print Quality from CUPS
+                    if let Some(print_quality) = caps.print_quality() {
+                        let values: Vec<String> = print_quality.values.iter().map(|v| v.value.clone()).collect();
+                        if !values.is_empty() {
+                            content = content
+                                .push(text(&print_quality.display_name).size(11))
+                                .push(pick_list(values, self.selected_cups_print_quality.clone(), Message::CupsPrintQualitySelected)
+                                    .width(Length::Fill))
+                                .push(Space::with_height(Length::Fixed(5.0)));
+                        }
+                    }
+                    
+                    // Color Model from CUPS
+                    if let Some(color_model) = caps.color_model() {
+                        let values: Vec<String> = color_model.values.iter().map(|v| v.value.clone()).collect();
+                        if !values.is_empty() {
+                            content = content
+                                .push(text(&color_model.display_name).size(11))
+                                .push(pick_list(values, self.selected_cups_color_model.clone(), Message::CupsColorModelSelected)
+                                    .width(Length::Fill));
+                        }
+                    }
+                } else {
+                    // Fallback to built-in options when no CUPS data
+                    let paper_types = vec![
+                        PaperType::Plain, PaperType::SuperHighGloss, PaperType::Glossy,
+                        PaperType::SemiGloss, PaperType::Matte, PaperType::FineArt,
+                    ];
+                    let print_qualities = vec![
+                        PrintQuality::Highest, PrintQuality::High,
+                        PrintQuality::Standard, PrintQuality::Draft,
+                    ];
+                    
+                    content = content
+                        .push(text("Media Type").size(12))
+                        .push(pick_list(paper_types, Some(self.layout.page.paper_type), Message::PaperTypeSelected)
+                            .width(Length::Fill))
+                        .push(Space::with_height(Length::Fixed(10.0)))
+                        .push(text("Print Quality").size(12))
+                        .push(pick_list(print_qualities, Some(self.layout.page.print_quality), Message::PrintQualitySelected)
+                            .width(Length::Fill));
+                }
+                
+                content.into()
             }
             SettingsTab::Layout => {
                 // Layout Tab - Margins
@@ -1222,30 +1370,6 @@ impl PrintLayout {
                         self.layout.page.width_mm, 
                         self.layout.page.height_mm)).size(11),
                     text(format!("Orientation: {}", self.layout.page.orientation)).size(11),
-                ]
-                .spacing(8)
-                .into()
-            }
-            SettingsTab::ColorManagement => {
-                // Color Management Tab
-                let color_modes = vec![
-                    ColorMode::UseICCProfile, ColorMode::DriverMatching,
-                    ColorMode::NoColorCorrection, ColorMode::BlackAndWhite,
-                ];
-
-                column![
-                    text("Color Mode").size(12),
-                    pick_list(color_modes, Some(self.layout.page.color_mode), Message::ColorModeSelected)
-                        .width(Length::Fill),
-                    Space::with_height(Length::Fixed(15.0)),
-                    text("Color Mode Info").size(11),
-                    horizontal_rule(1),
-                    match self.layout.page.color_mode {
-                        ColorMode::UseICCProfile => text("Uses ICC profiles for accurate color matching with your paper type.").size(10),
-                        ColorMode::DriverMatching => text("Uses driver color matching for consistent results.").size(10),
-                        ColorMode::NoColorCorrection => text("Prints without any color correction applied.").size(10),
-                        ColorMode::BlackAndWhite => text("Converts image to black and white for printing.").size(10),
-                    },
                 ]
                 .spacing(8)
                 .into()

@@ -37,10 +37,10 @@ sudo dnf install print-layout
 #### Manual RPM Installation
 ```bash
 # Download the RPM package from releases
-wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.1.0/print-layout-0.1.0-1.fc43.x86_64.rpm
+wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.2.1/print-layout-0.2.1-1.fc43.x86_64.rpm
 
 # Install with dnf
-sudo dnf install ./print-layout-0.1.0-1.fc43.x86_64.rpm
+sudo dnf install ./print-layout-0.2.1-1.fc43.x86_64.rpm
 ```
 
 ### Method 2: AppImage (Universal Linux)
@@ -49,13 +49,13 @@ AppImage works on any Linux distribution without installation:
 
 ```bash
 # Download the AppImage
-wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.1.0/print-layout-0.1.0-x86_64.AppImage
+wget https://github.com/ChristopherHardiman/PrintLayout/releases/download/v0.2.1/print-layout-0.2.1-x86_64.AppImage
 
 # Make it executable
-chmod +x print-layout-0.1.0-x86_64.AppImage
+chmod +x print-layout-0.2.1-x86_64.AppImage
 
 # Run the application
-./print-layout-0.1.0-x86_64.AppImage
+./print-layout-0.2.1-x86_64.AppImage
 ```
 
 #### Optional: Desktop Integration for AppImage
@@ -67,7 +67,7 @@ cat > ~/.local/share/applications/print-layout.desktop << EOF
 [Desktop Entry]
 Type=Application
 Name=Print Layout
-Exec=/path/to/print-layout-0.1.0-x86_64.AppImage
+Exec=/path/to/print-layout-0.2.1-x86_64.AppImage
 Icon=print-layout
 Categories=Graphics;Photography;Publishing;
 EOF

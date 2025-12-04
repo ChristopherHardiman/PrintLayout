@@ -26,6 +26,81 @@ pub enum PrinterState {
     Unknown,
 }
 
+/// A single printer option with its available values
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrinterOption {
+    /// Internal option name (e.g., "InputSlot")
+    pub name: String,
+    /// Human-readable name (e.g., "Media Source")
+    pub display_name: String,
+    /// Available values for this option
+    pub values: Vec<PrinterOptionValue>,
+    /// Index of the default value in `values`
+    pub default_index: Option<usize>,
+}
+
+/// A single value for a printer option
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrinterOptionValue {
+    /// Internal value (e.g., "ByPassTray")
+    pub value: String,
+    /// Whether this is the current default
+    pub is_default: bool,
+}
+
+impl PrinterOption {
+    /// Get the default value, if any
+    pub fn default_value(&self) -> Option<&str> {
+        self.default_index.map(|i| self.values[i].value.as_str())
+    }
+    
+    /// Get the currently selected or default value
+    pub fn current_value(&self) -> Option<&str> {
+        self.values.iter()
+            .find(|v| v.is_default)
+            .map(|v| v.value.as_str())
+    }
+}
+
+/// All available options for a specific printer
+#[derive(Debug, Clone, Default)]
+pub struct PrinterCapabilities {
+    pub printer_name: String,
+    pub options: Vec<PrinterOption>,
+}
+
+impl PrinterCapabilities {
+    /// Get an option by its internal name
+    pub fn get_option(&self, name: &str) -> Option<&PrinterOption> {
+        self.options.iter().find(|o| o.name == name)
+    }
+    
+    /// Get the InputSlot (Media Source) option
+    pub fn input_slot(&self) -> Option<&PrinterOption> {
+        self.get_option("InputSlot")
+    }
+    
+    /// Get the MediaType option
+    pub fn media_type(&self) -> Option<&PrinterOption> {
+        self.get_option("MediaType")
+    }
+    
+    /// Get the ColorModel option
+    pub fn color_model(&self) -> Option<&PrinterOption> {
+        self.get_option("ColorModel")
+    }
+    
+    /// Get the cupsPrintQuality option
+    pub fn print_quality(&self) -> Option<&PrinterOption> {
+        self.get_option("cupsPrintQuality")
+    }
+    
+    /// Get the PageSize option (all supported paper sizes)
+    pub fn page_sizes(&self) -> Option<&PrinterOption> {
+        self.get_option("PageSize")
+    }
+}
+
 /// Print job configuration
 #[derive(Debug, Clone)]
 pub struct PrintJob {
@@ -33,6 +108,8 @@ pub struct PrintJob {
     pub printer_name: String,
     pub copies: u32,
     pub dpi: u32,
+    /// Additional CUPS options (e.g., "InputSlot=ByPassTray")
+    pub extra_options: Vec<(String, String)>,
 }
 
 /// Page orientation (kept for backwards compatibility, but layout.page.orientation is preferred)
@@ -153,6 +230,71 @@ pub fn discover_printers() -> Result<Vec<PrinterInfo>, PrintError> {
 
     log::info!("Found {} printers", printers.len());
     Ok(printers)
+}
+
+/// Query available options for a specific printer using lpoptions
+pub fn get_printer_capabilities(printer_name: &str) -> Result<PrinterCapabilities, PrintError> {
+    log::info!("Querying capabilities for printer '{}'", printer_name);
+
+    let output = Command::new("lpoptions")
+        .arg("-p")
+        .arg(printer_name)
+        .arg("-l")
+        .output()
+        .map_err(|_| PrintError::CupsNotAvailable)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::warn!("lpoptions failed for {}: {}", printer_name, stderr);
+        return Ok(PrinterCapabilities {
+            printer_name: printer_name.to_string(),
+            options: Vec::new(),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut options = Vec::new();
+
+    // Parse each line: "OptionName/DisplayName: value1 *defaultValue value2"
+    for line in stdout.lines() {
+        if let Some((name_part, values_part)) = line.split_once(':') {
+            // Parse option name and display name
+            let (name, display_name) = if let Some((n, d)) = name_part.split_once('/') {
+                (n.trim().to_string(), d.trim().to_string())
+            } else {
+                let n = name_part.trim().to_string();
+                (n.clone(), n)
+            };
+
+            // Parse values, tracking default (marked with *)
+            let mut values = Vec::new();
+            let mut default_index = None;
+
+            for (i, val) in values_part.split_whitespace().enumerate() {
+                let is_default = val.starts_with('*');
+                let value = val.trim_start_matches('*').to_string();
+                
+                if is_default {
+                    default_index = Some(i);
+                }
+                
+                values.push(PrinterOptionValue { value, is_default });
+            }
+
+            options.push(PrinterOption {
+                name,
+                display_name,
+                values,
+                default_index,
+            });
+        }
+    }
+
+    log::info!("Found {} options for printer '{}'", options.len(), printer_name);
+    Ok(PrinterCapabilities {
+        printer_name: printer_name.to_string(),
+        options,
+    })
 }
 
 /// Get the default printer
@@ -330,6 +472,13 @@ pub fn send_to_printer(job: &PrintJob, temp_file: &Path) -> Result<String, Print
     
     // For proper scaling, tell CUPS to fit the image to the page
     cmd.arg("-o").arg("fit-to-page");
+    
+    // Add any extra options (InputSlot, MediaType, ColorModel, etc.)
+    for (opt_name, opt_value) in &job.extra_options {
+        let option_str = format!("{}={}", opt_name, opt_value);
+        log::debug!("Adding print option: {}", option_str);
+        cmd.arg("-o").arg(option_str);
+    }
 
     // Add the file to print
     cmd.arg(temp_file);
@@ -413,6 +562,37 @@ mod tests {
                     "Printer discovery failed (expected on systems without CUPS): {}",
                     e
                 );
+            }
+        }
+    }
+    
+    #[test]
+    fn test_printer_capabilities() {
+        // First discover printers
+        let printers = match discover_printers() {
+            Ok(p) => p,
+            Err(e) => {
+                println!("No CUPS available: {}", e);
+                return;
+            }
+        };
+        
+        // Query capabilities for each printer
+        for printer in &printers {
+            println!("\n=== Capabilities for '{}' ===", printer.name);
+            match get_printer_capabilities(&printer.name) {
+                Ok(caps) => {
+                    for option in &caps.options {
+                        println!("\n{} ({}):", option.display_name, option.name);
+                        for value in &option.values {
+                            let marker = if value.is_default { "*" } else { " " };
+                            println!("  {} {}", marker, value.value);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("  Error: {}", e);
+                }
             }
         }
     }

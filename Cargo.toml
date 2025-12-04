@@ -1,6 +1,6 @@
 [package]
 name = "print_layout"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Christopher Hardiman"]
 description = "Lightweight cross-desktop GUI for creating print layouts"

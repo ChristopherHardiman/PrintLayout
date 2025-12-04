@@ -5,6 +5,37 @@ All notable changes to Print Layout will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-12-04
+
+### Added
+- CUPS printer capabilities integration - dynamic querying of printer options
+- Dynamic Print Settings dropdowns populated from CUPS data
+- Support for Media Source, Media Type, Print Quality, and Output Mode from printer
+- PrinterCapabilities, PrinterOption, PrinterOptionValue structures for CUPS data
+- Extra options field in PrintJob for passing CUPS options to lp command
+
+### Changed
+- Print Settings tab now shows printer-specific options from CUPS
+- Removed Color Management tab (Output Mode now available directly from CUPS)
+- Paper orientation is now preserved when changing paper size
+
+### Fixed
+- Orientation glitch when switching paper sizes in landscape mode
+
+## [0.2.0] - 2025-12-03
+
+### Added
+- GitHub Actions workflow for automated RPM builds on tag push
+- Automated GitHub releases with RPM and SRPM artifacts
+- Comprehensive upgrade plan for future features (multi-page, PDF export, undo/redo)
+
+### Changed
+- Updated documentation to reflect current project status
+- Cleaned up development artifacts
+
+### Fixed
+- RPM spec file Source0 URL for proper GitHub archive downloads
+
 ## [0.1.0] - 2024-11-28
 
 ### Added
