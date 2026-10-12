@@ -1,10 +1,10 @@
+use ::image::GenericImageView;
 use iced::widget::{
-    button, canvas, column, container, pick_list, row, scrollable, text, text_input,
-    horizontal_rule, vertical_rule, checkbox, Space, image as iced_image, center,
-    progress_bar, opaque, mouse_area,
+    button, canvas, center, checkbox, column, container, horizontal_rule, image as iced_image,
+    mouse_area, opaque, pick_list, progress_bar, row, scrollable, text, text_input, vertical_rule,
+    Space,
 };
 use iced::{Alignment, Color, Element, Length, Padding, Size, Task, Theme};
-use ::image::GenericImageView;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -15,13 +15,18 @@ mod printing;
 
 use canvas_widget::{CanvasMessage, LayoutCanvas, ResizeHandle};
 use config::{ConfigManager, ProjectLayout, UserPreferences};
-use layout::{Layout, PaperSize, PaperType, PlacedImage, PrintQuality, Orientation as LayoutOrientation};
-use printing::{discover_printers, execute_print_job, get_printer_capabilities, PrintJob, PrinterInfo, PrinterCapabilities};
+use layout::{
+    Layout, Orientation as LayoutOrientation, PaperSize, PaperType, PlacedImage, PrintQuality,
+};
+use printing::{
+    discover_printers, execute_print_job, get_printer_capabilities, PrintJob, PrinterCapabilities,
+    PrinterInfo,
+};
 
 pub fn main() -> iced::Result {
     env_logger::init();
     log::info!("Initializing Print Layout v{}", VERSION);
-    
+
     iced::application(PrintLayout::title, PrintLayout::update, PrintLayout::view)
         .theme(PrintLayout::theme)
         .window_size(Size::new(1400.0, 900.0))
@@ -45,8 +50,8 @@ pub enum PrintStatus {
     Idle,
     Rendering,
     Sending,
-    Completed(String),  // Job ID
-    Failed(String),     // Error message
+    Completed(String), // Job ID
+    Failed(String),    // Error message
 }
 
 #[derive(Debug, Clone)]
@@ -75,14 +80,14 @@ pub enum Message {
     ThumbnailClicked(String),
     ImageCopiesChanged(String, String),
     // Image manipulation tools
-    RotateImageCW,           // Rotate 90° clockwise
-    RotateImageCCW,          // Rotate 90° counter-clockwise
-    FlipImageHorizontal,     // Mirror horizontally
-    FlipImageVertical,       // Flip vertically
-    ImageOpacityChanged(String),  // Change opacity (0-100%)
-    ImageWidthChanged(String),    // Resize width in mm
-    ImageHeightChanged(String),   // Resize height in mm
-    MaintainAspectRatio(bool),    // Toggle aspect ratio lock
+    RotateImageCW,               // Rotate 90° clockwise
+    RotateImageCCW,              // Rotate 90° counter-clockwise
+    FlipImageHorizontal,         // Mirror horizontally
+    FlipImageVertical,           // Flip vertically
+    ImageOpacityChanged(String), // Change opacity (0-100%)
+    ImageWidthChanged(String),   // Resize width in mm
+    ImageHeightChanged(String),  // Resize height in mm
+    MaintainAspectRatio(bool),   // Toggle aspect ratio lock
     // Printing messages
     PrintersDiscovered(Vec<PrinterInfo>),
     PrinterSelected(String),
@@ -172,10 +177,10 @@ impl PrintLayout {
         // Initialize config manager
         let config_manager = ConfigManager::new().expect("Failed to create config manager");
         let preferences = config_manager.load_config();
-        
+
         // Create layout with preferences, applying last successful print settings if available
         let mut layout = Layout::new();
-        
+
         // Apply last print settings if they exist
         let last_print = &preferences.last_print_settings;
         if let Some(paper_size) = last_print.paper_size {
@@ -210,16 +215,16 @@ impl PrintLayout {
             layout.page.margin_left_mm = margins.2;
             layout.page.margin_right_mm = margins.3;
         }
-        
+
         let canvas = LayoutCanvas::new(layout.clone());
-        
+
         // Use margins from last print settings if available, otherwise use defaults
-        let (margin_top, margin_bottom, margin_left, margin_right) = 
+        let (margin_top, margin_bottom, margin_left, margin_right) =
             last_print.margins.unwrap_or(preferences.default_margins);
-        
+
         // Get copies from last print, default to 1
         let print_copies = last_print.copies.unwrap_or(1);
-        
+
         // Pre-compute zoom text for display
         let zoom_text = format!("{:.0}%", preferences.zoom_level * 100.0);
 
@@ -237,7 +242,10 @@ impl PrintLayout {
             drag_image_initial_size: (0.0, 0.0),
             printers: Vec::new(),
             // Use printer from last print settings if available
-            selected_printer: last_print.printer_name.clone().or(preferences.last_printer.clone()),
+            selected_printer: last_print
+                .printer_name
+                .clone()
+                .or(preferences.last_printer.clone()),
             printer_capabilities: None,
             selected_input_slot: None,
             selected_cups_media_type: None,
@@ -264,7 +272,7 @@ impl PrintLayout {
             thumbnail_cache: HashMap::new(),
             zoom_text,
         };
-        
+
         let mut tasks = vec![
             Task::perform(
                 async {
@@ -277,12 +285,12 @@ impl PrintLayout {
             ),
             Task::done(Message::CheckAutoSave),
         ];
-        
+
         // Set up auto-save timer if enabled
         if instance.preferences.auto_save_enabled {
             tasks.push(Task::done(Message::AutoSaveTick));
         }
-        
+
         (instance, Task::batch(tasks))
     }
 
@@ -347,11 +355,11 @@ impl PrintLayout {
                                 }
                                 let dx = x - self.drag_start_pos.0;
                                 let dy = y - self.drag_start_pos.1;
-                                
+
                                 let (init_x, init_y) = self.drag_image_initial_pos;
                                 let (init_w, init_h) = self.drag_image_initial_size;
                                 let aspect_ratio = init_w / init_h;
-                                
+
                                 let (new_x, new_y, new_w, new_h) = match handle {
                                     ResizeHandle::BottomRight => {
                                         let new_w = (init_w + dx).max(10.0);
@@ -432,7 +440,7 @@ impl PrintLayout {
                                         (init_x, new_y, new_w, new_h)
                                     }
                                 };
-                                
+
                                 if let Some(image) = self.layout.get_image_mut(&id) {
                                     image.x_mm = new_x;
                                     image.y_mm = new_y;
@@ -443,7 +451,8 @@ impl PrintLayout {
                                     self.image_height_input = format!("{:.1}", new_h);
                                 }
                                 // Use optimized method that updates canvas bounds directly
-                                self.canvas.update_image_bounds(&id, new_x, new_y, new_w, new_h);
+                                self.canvas
+                                    .update_image_bounds(&id, new_x, new_y, new_w, new_h);
                             }
                         }
                         DragMode::None => {}
@@ -480,7 +489,9 @@ impl PrintLayout {
                             .set_title("Select Images to Add")
                             .pick_files()
                             .await
-                            .map(|files| files.into_iter().map(|f| f.path().to_path_buf()).collect())
+                            .map(|files| {
+                                files.into_iter().map(|f| f.path().to_path_buf()).collect()
+                            })
                             .unwrap_or_default()
                     },
                     Message::ImageFilesSelected,
@@ -606,7 +617,10 @@ impl PrintLayout {
                     LayoutOrientation::Portrait => LayoutOrientation::Landscape,
                     LayoutOrientation::Landscape => LayoutOrientation::Portrait,
                 };
-                std::mem::swap(&mut self.layout.page.width_mm, &mut self.layout.page.height_mm);
+                std::mem::swap(
+                    &mut self.layout.page.width_mm,
+                    &mut self.layout.page.height_mm,
+                );
                 self.layout.page.orientation = new_orientation;
                 self.canvas.set_layout(self.layout.clone());
                 self.is_modified = true;
@@ -638,7 +652,7 @@ impl PrintLayout {
             Message::CopiesChanged(value) => {
                 self.copies_input = value.clone();
                 if let Ok(copies) = value.parse::<u32>() {
-                    if copies >= 1 && copies <= 99 {
+                    if (1..=99).contains(&copies) {
                         self.print_copies = copies;
                     }
                 }
@@ -712,7 +726,8 @@ impl PrintLayout {
                     if new_width > 0.0 {
                         if let Some(img) = self.layout.selected_image_mut() {
                             if self.maintain_aspect_ratio {
-                                let aspect = img.original_height_px as f32 / img.original_width_px as f32;
+                                let aspect =
+                                    img.original_height_px as f32 / img.original_width_px as f32;
                                 img.height_mm = new_width * aspect;
                                 self.image_height_input = format!("{:.1}", img.height_mm);
                             }
@@ -729,7 +744,8 @@ impl PrintLayout {
                     if new_height > 0.0 {
                         if let Some(img) = self.layout.selected_image_mut() {
                             if self.maintain_aspect_ratio {
-                                let aspect = img.original_width_px as f32 / img.original_height_px as f32;
+                                let aspect =
+                                    img.original_width_px as f32 / img.original_height_px as f32;
                                 img.width_mm = new_height * aspect;
                                 self.image_width_input = format!("{:.1}", img.width_mm);
                             }
@@ -756,21 +772,18 @@ impl PrintLayout {
             }
             Message::PrintersDiscovered(printers) => {
                 self.printers = printers;
-                let printer_to_select = if let Some(default_printer) = self.printers.iter().find(|p| p.is_default) {
-                    Some(default_printer.name.clone())
-                } else if let Some(first_printer) = self.printers.first() {
-                    Some(first_printer.name.clone())
-                } else {
-                    None
-                };
-                
+                let printer_to_select = self
+                    .printers
+                    .iter()
+                    .find(|p| p.is_default)
+                    .or_else(|| self.printers.first())
+                    .map(|p| p.name.clone());
+
                 if let Some(printer_name) = printer_to_select {
                     self.selected_printer = Some(printer_name.clone());
                     // Load capabilities for the selected printer
                     return Task::perform(
-                        async move {
-                            get_printer_capabilities(&printer_name).unwrap_or_default()
-                        },
+                        async move { get_printer_capabilities(&printer_name).unwrap_or_default() },
                         Message::PrinterCapabilitiesLoaded,
                     );
                 }
@@ -784,14 +797,16 @@ impl PrintLayout {
                 self.selected_cups_print_quality = None;
                 // Load capabilities for the new printer
                 return Task::perform(
-                    async move {
-                        get_printer_capabilities(&printer_name).unwrap_or_default()
-                    },
+                    async move { get_printer_capabilities(&printer_name).unwrap_or_default() },
                     Message::PrinterCapabilitiesLoaded,
                 );
             }
             Message::PrinterCapabilitiesLoaded(caps) => {
-                log::info!("Loaded {} options for printer '{}'", caps.options.len(), caps.printer_name);
+                log::info!(
+                    "Loaded {} options for printer '{}'",
+                    caps.options.len(),
+                    caps.printer_name
+                );
                 // Set defaults from CUPS
                 if let Some(input_slot) = caps.input_slot() {
                     self.selected_input_slot = input_slot.current_value().map(String::from);
@@ -803,7 +818,8 @@ impl PrintLayout {
                     self.selected_cups_color_model = color_model.current_value().map(String::from);
                 }
                 if let Some(print_quality) = caps.print_quality() {
-                    self.selected_cups_print_quality = print_quality.current_value().map(String::from);
+                    self.selected_cups_print_quality =
+                        print_quality.current_value().map(String::from);
                 }
                 self.printer_capabilities = Some(caps);
             }
@@ -827,10 +843,10 @@ impl PrintLayout {
                     Some(name) => name.clone(),
                     None => return Task::none(),
                 };
-                
+
                 // Set status to rendering
                 self.print_status = PrintStatus::Rendering;
-                
+
                 // Build extra options from CUPS selections
                 let mut extra_options = Vec::new();
                 if let Some(ref slot) = self.selected_input_slot {
@@ -845,7 +861,7 @@ impl PrintLayout {
                 if let Some(ref quality) = self.selected_cups_print_quality {
                     extra_options.push(("cupsPrintQuality".to_string(), quality.clone()));
                 }
-                
+
                 let job = PrintJob {
                     layout: self.layout.clone(),
                     printer_name,
@@ -870,7 +886,7 @@ impl PrintLayout {
                     Ok(job_id) => {
                         log::info!("Print job submitted: {}", job_id);
                         self.print_status = PrintStatus::Completed(job_id);
-                        
+
                         // Save the successful print settings
                         self.preferences.last_print_settings = config::LastPrintSettings {
                             printer_name: self.selected_printer.clone(),
@@ -889,7 +905,7 @@ impl PrintLayout {
                             )),
                             last_success_time: Some(chrono::Utc::now()),
                         };
-                        
+
                         // Save preferences to disk
                         if let Err(e) = self.config_manager.save_config(&self.preferences) {
                             log::error!("Failed to save print settings: {}", e);
@@ -973,19 +989,23 @@ impl PrintLayout {
                         self.canvas.set_layout(self.layout.clone());
                         self.project = Some(project);
                         self.is_modified = false;
-                        
+
                         // Pre-populate thumbnail cache for loaded images
                         for item in &self.layout.images {
-                            self.thumbnail_cache.entry(item.path.clone())
-                                .or_insert_with(|| iced::widget::image::Handle::from_path(&item.path));
+                            self.thumbnail_cache
+                                .entry(item.path.clone())
+                                .or_insert_with(|| {
+                                    iced::widget::image::Handle::from_path(&item.path)
+                                });
                         }
-                        
+
                         // Update recent files
                         if let Some(path) = &self.current_file {
-                            self.config_manager.add_recent_file(&mut self.preferences, path.clone());
+                            self.config_manager
+                                .add_recent_file(&mut self.preferences, path.clone());
                             let _ = self.config_manager.save_config(&self.preferences);
                         }
-                        
+
                         log::info!("Layout loaded successfully");
                     }
                     Err(error) => {
@@ -1008,13 +1028,16 @@ impl PrintLayout {
                         self.canvas.set_layout(self.layout.clone());
                         self.project = Some(project);
                         self.is_modified = true;
-                        
+
                         // Pre-populate thumbnail cache for recovered images
                         for item in &self.layout.images {
-                            self.thumbnail_cache.entry(item.path.clone())
-                                .or_insert_with(|| iced::widget::image::Handle::from_path(&item.path));
+                            self.thumbnail_cache
+                                .entry(item.path.clone())
+                                .or_insert_with(|| {
+                                    iced::widget::image::Handle::from_path(&item.path)
+                                });
                         }
-                        
+
                         let _ = self.config_manager.delete_auto_save();
                         log::info!("Recovered from auto-save");
                     }
@@ -1087,7 +1110,8 @@ impl PrintLayout {
                 proj.clone()
             }
             None => {
-                let name = path.file_stem()
+                let name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("Unnamed")
                     .to_string();
@@ -1099,17 +1123,18 @@ impl PrintLayout {
         match self.config_manager.save_layout(&project, &path) {
             Ok(_) => {
                 // Update recent files before setting current_file
-                self.config_manager.add_recent_file(&mut self.preferences, path.clone());
-                
+                self.config_manager
+                    .add_recent_file(&mut self.preferences, path.clone());
+
                 // Update last open directory
                 if let Some(parent) = path.parent() {
                     self.preferences.last_open_directory = Some(parent.to_path_buf());
                 }
-                
+
                 self.current_file = Some(path);
                 self.project = Some(project);
                 self.is_modified = false;
-                
+
                 let _ = self.config_manager.save_config(&self.preferences);
                 log::info!("Layout saved successfully");
             }
@@ -1117,7 +1142,7 @@ impl PrintLayout {
                 log::error!("Failed to save layout: {}", e);
             }
         }
-        
+
         Task::none()
     }
 
@@ -1127,11 +1152,19 @@ impl PrintLayout {
         // ====================================================================
         let printer_picker = if !self.printers.is_empty() {
             let printer_names: Vec<String> = self.printers.iter().map(|p| p.name.clone()).collect();
-            pick_list(printer_names, self.selected_printer.clone(), Message::PrinterSelected)
-                .width(Length::Fixed(200.0))
+            pick_list(
+                printer_names,
+                self.selected_printer.clone(),
+                Message::PrinterSelected,
+            )
+            .width(Length::Fixed(200.0))
         } else {
-            pick_list(vec!["No printers found".to_string()], Some("No printers found".to_string()), |_| Message::PrinterSelected("".to_string()))
-                .width(Length::Fixed(200.0))
+            pick_list(
+                vec!["No printers found".to_string()],
+                Some("No printers found".to_string()),
+                |_| Message::PrinterSelected("".to_string()),
+            )
+            .width(Length::Fixed(200.0))
         };
 
         // Build recent files button with indicator
@@ -1172,16 +1205,20 @@ impl PrintLayout {
 
         let orientation_btn = match self.layout.page.orientation {
             LayoutOrientation::Portrait => button(
-                row![text("|").size(16), text(" Portrait").size(12)].align_y(Alignment::Center)
-            ).on_press(Message::OrientationToggled),
+                row![text("|").size(16), text(" Portrait").size(12)].align_y(Alignment::Center),
+            )
+            .on_press(Message::OrientationToggled),
             LayoutOrientation::Landscape => button(
-                row![text("—").size(16), text(" Landscape").size(12)].align_y(Alignment::Center)
-            ).on_press(Message::OrientationToggled),
+                row![text("—").size(16), text(" Landscape").size(12)].align_y(Alignment::Center),
+            )
+            .on_press(Message::OrientationToggled),
         };
 
         let tools_area = row![
-            button(row![text("+").size(16), text(" Add Image").size(12)].align_y(Alignment::Center))
-                .on_press(Message::AddImageClicked),
+            button(
+                row![text("+").size(16), text(" Add Image").size(12)].align_y(Alignment::Center)
+            )
+            .on_press(Message::AddImageClicked),
             delete_button,
             Space::with_width(Length::Fixed(20.0)),
             button(text("−").size(18)).on_press(Message::ZoomOut),
@@ -1202,24 +1239,24 @@ impl PrintLayout {
         let tab_buttons = row![
             button(text("Print").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::PrintSettings))
-                .style(if self.settings_tab == SettingsTab::PrintSettings { 
-                    button::primary 
-                } else { 
-                    button::secondary 
+                .style(if self.settings_tab == SettingsTab::PrintSettings {
+                    button::primary
+                } else {
+                    button::secondary
                 }),
             button(text("Layout").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::Layout))
-                .style(if self.settings_tab == SettingsTab::Layout { 
-                    button::primary 
-                } else { 
-                    button::secondary 
+                .style(if self.settings_tab == SettingsTab::Layout {
+                    button::primary
+                } else {
+                    button::secondary
                 }),
             button(text("Image").size(10))
                 .on_press(Message::SettingsTabChanged(SettingsTab::ImageTools))
-                .style(if self.settings_tab == SettingsTab::ImageTools { 
-                    button::primary 
-                } else { 
-                    button::secondary 
+                .style(if self.settings_tab == SettingsTab::ImageTools {
+                    button::primary
+                } else {
+                    button::secondary
                 }),
         ]
         .spacing(2);
@@ -1228,102 +1265,169 @@ impl PrintLayout {
             SettingsTab::PrintSettings => {
                 // Print Settings Tab - use CUPS options when available
                 let mut content = column![].spacing(5);
-                
+
                 // Paper Size (always show our built-in sizes for layout)
                 let paper_sizes = vec![
-                    PaperSize::Photo3_5x5, PaperSize::Photo4x6, PaperSize::Photo5x5,
-                    PaperSize::Photo5x7, PaperSize::Photo7x10, PaperSize::Photo8x10,
-                    PaperSize::Letter, PaperSize::Legal, PaperSize::Photo10x12,
-                    PaperSize::Photo11x17, PaperSize::Photo12x12, PaperSize::Photo13x19,
-                    PaperSize::Panorama, PaperSize::A3, PaperSize::A4, PaperSize::A5,
-                    PaperSize::Tabloid, PaperSize::Ledger,
+                    PaperSize::Photo3_5x5,
+                    PaperSize::Photo4x6,
+                    PaperSize::Photo5x5,
+                    PaperSize::Photo5x7,
+                    PaperSize::Photo7x10,
+                    PaperSize::Photo8x10,
+                    PaperSize::Letter,
+                    PaperSize::Legal,
+                    PaperSize::Photo10x12,
+                    PaperSize::Photo11x17,
+                    PaperSize::Photo12x12,
+                    PaperSize::Photo13x19,
+                    PaperSize::Panorama,
+                    PaperSize::A3,
+                    PaperSize::A4,
+                    PaperSize::A5,
+                    PaperSize::Tabloid,
+                    PaperSize::Ledger,
                 ];
                 content = content
                     .push(text("Paper Size").size(12))
-                    .push(pick_list(paper_sizes, Some(self.layout.page.paper_size), Message::PaperSizeSelected)
-                        .width(Length::Fill))
+                    .push(
+                        pick_list(
+                            paper_sizes,
+                            Some(self.layout.page.paper_size),
+                            Message::PaperSizeSelected,
+                        )
+                        .width(Length::Fill),
+                    )
                     .push(Space::with_height(Length::Fixed(8.0)));
-                
+
                 // Borderless option
                 content = content
-                    .push(checkbox("Borderless Printing", self.layout.page.borderless)
-                        .on_toggle(Message::BorderlessToggled))
+                    .push(
+                        checkbox("Borderless Printing", self.layout.page.borderless)
+                            .on_toggle(Message::BorderlessToggled),
+                    )
                     .push(Space::with_height(Length::Fixed(8.0)));
-                
+
                 // CUPS-specific options (if available)
                 if let Some(ref caps) = self.printer_capabilities {
                     content = content
                         .push(horizontal_rule(1))
                         .push(text("Printer Options").size(12))
                         .push(Space::with_height(Length::Fixed(5.0)));
-                    
+
                     // Media Source (InputSlot)
                     if let Some(input_slot) = caps.input_slot() {
-                        let values: Vec<String> = input_slot.values.iter().map(|v| v.value.clone()).collect();
+                        let values: Vec<String> =
+                            input_slot.values.iter().map(|v| v.value.clone()).collect();
                         if !values.is_empty() {
                             content = content
                                 .push(text(&input_slot.display_name).size(11))
-                                .push(pick_list(values, self.selected_input_slot.clone(), Message::InputSlotSelected)
-                                    .width(Length::Fill))
+                                .push(
+                                    pick_list(
+                                        values,
+                                        self.selected_input_slot.clone(),
+                                        Message::InputSlotSelected,
+                                    )
+                                    .width(Length::Fill),
+                                )
                                 .push(Space::with_height(Length::Fixed(5.0)));
                         }
                     }
-                    
+
                     // Media Type from CUPS
                     if let Some(media_type) = caps.media_type() {
-                        let values: Vec<String> = media_type.values.iter().map(|v| v.value.clone()).collect();
+                        let values: Vec<String> =
+                            media_type.values.iter().map(|v| v.value.clone()).collect();
                         if !values.is_empty() {
                             content = content
                                 .push(text(&media_type.display_name).size(11))
-                                .push(pick_list(values, self.selected_cups_media_type.clone(), Message::CupsMediaTypeSelected)
-                                    .width(Length::Fill))
+                                .push(
+                                    pick_list(
+                                        values,
+                                        self.selected_cups_media_type.clone(),
+                                        Message::CupsMediaTypeSelected,
+                                    )
+                                    .width(Length::Fill),
+                                )
                                 .push(Space::with_height(Length::Fixed(5.0)));
                         }
                     }
-                    
+
                     // Print Quality from CUPS
                     if let Some(print_quality) = caps.print_quality() {
-                        let values: Vec<String> = print_quality.values.iter().map(|v| v.value.clone()).collect();
+                        let values: Vec<String> = print_quality
+                            .values
+                            .iter()
+                            .map(|v| v.value.clone())
+                            .collect();
                         if !values.is_empty() {
                             content = content
                                 .push(text(&print_quality.display_name).size(11))
-                                .push(pick_list(values, self.selected_cups_print_quality.clone(), Message::CupsPrintQualitySelected)
-                                    .width(Length::Fill))
+                                .push(
+                                    pick_list(
+                                        values,
+                                        self.selected_cups_print_quality.clone(),
+                                        Message::CupsPrintQualitySelected,
+                                    )
+                                    .width(Length::Fill),
+                                )
                                 .push(Space::with_height(Length::Fixed(5.0)));
                         }
                     }
-                    
+
                     // Color Model from CUPS
                     if let Some(color_model) = caps.color_model() {
-                        let values: Vec<String> = color_model.values.iter().map(|v| v.value.clone()).collect();
+                        let values: Vec<String> =
+                            color_model.values.iter().map(|v| v.value.clone()).collect();
                         if !values.is_empty() {
-                            content = content
-                                .push(text(&color_model.display_name).size(11))
-                                .push(pick_list(values, self.selected_cups_color_model.clone(), Message::CupsColorModelSelected)
-                                    .width(Length::Fill));
+                            content = content.push(text(&color_model.display_name).size(11)).push(
+                                pick_list(
+                                    values,
+                                    self.selected_cups_color_model.clone(),
+                                    Message::CupsColorModelSelected,
+                                )
+                                .width(Length::Fill),
+                            );
                         }
                     }
                 } else {
                     // Fallback to built-in options when no CUPS data
                     let paper_types = vec![
-                        PaperType::Plain, PaperType::SuperHighGloss, PaperType::Glossy,
-                        PaperType::SemiGloss, PaperType::Matte, PaperType::FineArt,
+                        PaperType::Plain,
+                        PaperType::SuperHighGloss,
+                        PaperType::Glossy,
+                        PaperType::SemiGloss,
+                        PaperType::Matte,
+                        PaperType::FineArt,
                     ];
                     let print_qualities = vec![
-                        PrintQuality::Highest, PrintQuality::High,
-                        PrintQuality::Standard, PrintQuality::Draft,
+                        PrintQuality::Highest,
+                        PrintQuality::High,
+                        PrintQuality::Standard,
+                        PrintQuality::Draft,
                     ];
-                    
+
                     content = content
                         .push(text("Media Type").size(12))
-                        .push(pick_list(paper_types, Some(self.layout.page.paper_type), Message::PaperTypeSelected)
-                            .width(Length::Fill))
+                        .push(
+                            pick_list(
+                                paper_types,
+                                Some(self.layout.page.paper_type),
+                                Message::PaperTypeSelected,
+                            )
+                            .width(Length::Fill),
+                        )
                         .push(Space::with_height(Length::Fixed(10.0)))
                         .push(text("Print Quality").size(12))
-                        .push(pick_list(print_qualities, Some(self.layout.page.print_quality), Message::PrintQualitySelected)
-                            .width(Length::Fill));
+                        .push(
+                            pick_list(
+                                print_qualities,
+                                Some(self.layout.page.print_quality),
+                                Message::PrintQualitySelected,
+                            )
+                            .width(Length::Fill),
+                        );
                 }
-                
+
                 content.into()
             }
             SettingsTab::Layout => {
@@ -1366,9 +1470,11 @@ impl PrintLayout {
                     Space::with_height(Length::Fixed(15.0)),
                     text("Page Info").size(12),
                     horizontal_rule(1),
-                    text(format!("Size: {:.1} × {:.1} mm", 
-                        self.layout.page.width_mm, 
-                        self.layout.page.height_mm)).size(11),
+                    text(format!(
+                        "Size: {:.1} × {:.1} mm",
+                        self.layout.page.width_mm, self.layout.page.height_mm
+                    ))
+                    .size(11),
                     text(format!("Orientation: {}", self.layout.page.orientation)).size(11),
                 ]
                 .spacing(8)
@@ -1379,16 +1485,18 @@ impl PrintLayout {
                 if self.layout.selected_image_id.is_some() {
                     let selected_img = self.layout.selected_image();
                     let (rotation_text, flip_h, flip_v) = if let Some(img) = selected_img {
-                        (format!("{}°", img.rotation_degrees), img.flip_horizontal, img.flip_vertical)
+                        (
+                            format!("{}°", img.rotation_degrees),
+                            img.flip_horizontal,
+                            img.flip_vertical,
+                        )
                     } else {
                         ("0°".to_string(), false, false)
                     };
 
                     column![
                         text("Rotation").size(12),
-                        row![
-                            text(format!("Current: {}", rotation_text)).size(10),
-                        ],
+                        row![text(format!("Current: {}", rotation_text)).size(10),],
                         row![
                             button(text("↺ 90°").size(10))
                                 .on_press(Message::RotateImageCCW)
@@ -1403,11 +1511,19 @@ impl PrintLayout {
                         row![
                             button(text(if flip_h { "↔ H ✓" } else { "↔ H" }).size(10))
                                 .on_press(Message::FlipImageHorizontal)
-                                .style(if flip_h { button::primary } else { button::secondary })
+                                .style(if flip_h {
+                                    button::primary
+                                } else {
+                                    button::secondary
+                                })
                                 .padding(5),
                             button(text(if flip_v { "↕ V ✓" } else { "↕ V" }).size(10))
                                 .on_press(Message::FlipImageVertical)
-                                .style(if flip_v { button::primary } else { button::secondary })
+                                .style(if flip_v {
+                                    button::primary
+                                } else {
+                                    button::secondary
+                                })
                                 .padding(5),
                         ]
                         .spacing(5),
@@ -1445,7 +1561,8 @@ impl PrintLayout {
                     column![
                         text("No Image Selected").size(12),
                         Space::with_height(Length::Fixed(10.0)),
-                        text("Select an image from the\nthumbnails below to edit\nits properties.").size(10),
+                        text("Select an image from the\nthumbnails below to edit\nits properties.")
+                            .size(10),
                     ]
                     .spacing(5)
                     .into()
@@ -1470,27 +1587,24 @@ impl PrintLayout {
         // Calculate canvas size based on page dimensions and zoom
         let canvas_width = self.canvas.mm_to_pixels(self.layout.page.width_mm) + 40.0;
         let canvas_height = self.canvas.mm_to_pixels(self.layout.page.height_mm) + 40.0;
-        
+
         let canvas_elem: Element<'_, CanvasMessage> = canvas(&self.canvas)
             .width(Length::Fixed(canvas_width))
             .height(Length::Fixed(canvas_height))
             .into();
         let canvas_widget = canvas_elem.map(Message::CanvasMessage);
-        
+
         // Wrap canvas in a container with padding for visual margin
         let canvas_container = container(canvas_widget)
             .padding(20)
             .style(container::bordered_box);
 
         // Wrap in scrollable for both directions
-        let preview_area = scrollable(
-            scrollable(canvas_container)
-                .direction(scrollable::Direction::Horizontal(
-                    scrollable::Scrollbar::default()
-                ))
-        )
+        let preview_area = scrollable(scrollable(canvas_container).direction(
+            scrollable::Direction::Horizontal(scrollable::Scrollbar::default()),
+        ))
         .direction(scrollable::Direction::Vertical(
-            scrollable::Scrollbar::default()
+            scrollable::Scrollbar::default(),
         ))
         .width(Length::Fill)
         .height(Length::Fill);
@@ -1498,45 +1612,50 @@ impl PrintLayout {
         // ====================================================================
         // E: THUMBNAILS AREA (Bottom with image thumbnails)
         // ====================================================================
-        let thumbnails: Vec<Element<'_, Message>> = self.layout.images.iter().map(|img| {
-            let filename = img.path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
-            
-            // Truncate filename if too long
-            let display_name = if filename.len() > 12 {
-                format!("{}...", &filename[..9])
-            } else {
-                filename.to_string()
-            };
-            
-            let is_selected = self.layout.selected_image_id.as_ref() == Some(&img.id);
-            let style = if is_selected { button::primary } else { button::secondary };
-            
-            // Use cached thumbnail handle or create from path
-            let img_handle = self.thumbnail_cache
-                .get(&img.path)
-                .cloned()
-                .unwrap_or_else(|| iced::widget::image::Handle::from_path(&img.path));
-            
-            let thumb_image = iced_image(img_handle)
-                .width(Length::Fixed(60.0))
-                .height(Length::Fixed(60.0));
-            
-            let thumb_btn = button(
-                column![
-                    thumb_image,
-                    text(display_name).size(9),
-                ]
-                .align_x(Alignment::Center)
-                .spacing(2)
-            )
-            .on_press(Message::ThumbnailClicked(img.id.clone()))
-            .style(style)
-            .padding(5);
+        let thumbnails: Vec<Element<'_, Message>> = self
+            .layout
+            .images
+            .iter()
+            .map(|img| {
+                let filename = img.path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
 
-            thumb_btn.into()
-        }).collect();
+                // Truncate filename if too long
+                let display_name = if filename.len() > 12 {
+                    format!("{}...", &filename[..9])
+                } else {
+                    filename.to_string()
+                };
+
+                let is_selected = self.layout.selected_image_id.as_ref() == Some(&img.id);
+                let style = if is_selected {
+                    button::primary
+                } else {
+                    button::secondary
+                };
+
+                // Use cached thumbnail handle or create from path
+                let img_handle = self
+                    .thumbnail_cache
+                    .get(&img.path)
+                    .cloned()
+                    .unwrap_or_else(|| iced::widget::image::Handle::from_path(&img.path));
+
+                let thumb_image = iced_image(img_handle)
+                    .width(Length::Fixed(60.0))
+                    .height(Length::Fixed(60.0));
+
+                let thumb_btn = button(
+                    column![thumb_image, text(display_name).size(9),]
+                        .align_x(Alignment::Center)
+                        .spacing(2),
+                )
+                .on_press(Message::ThumbnailClicked(img.id.clone()))
+                .style(style)
+                .padding(5);
+
+                thumb_btn.into()
+            })
+            .collect();
 
         let thumbnails_row = if thumbnails.is_empty() {
             row![text("No images. Click 'Add Image' to add photos.").size(12)]
@@ -1571,8 +1690,7 @@ impl PrintLayout {
                 .on_press(Message::PrintClicked)
                 .padding(Padding::from([10, 30]))
         } else {
-            button(text("Print").size(16))
-                .padding(Padding::from([10, 30]))
+            button(text("Print").size(16)).padding(Padding::from([10, 30]))
         };
 
         let print_area = row![
@@ -1595,11 +1713,9 @@ impl PrintLayout {
         // Bottom section: Thumbnails + Print button
 
         let middle_section = row![
-            column![
-                preview_area,
-            ]
-            .width(Length::Fill)
-            .height(Length::Fill),
+            column![preview_area,]
+                .width(Length::Fill)
+                .height(Length::Fill),
             vertical_rule(1),
             settings_panel,
         ];
@@ -1627,15 +1743,19 @@ impl PrintLayout {
 
         // Create the base with optional overlays
         let dark_text = Color::from_rgb(0.1, 0.1, 0.1);
-        
+
         // First, check if we need to show the recovery dialog
         if self.show_recovery_dialog {
             let modal_content = container(
                 column![
                     text("Recover Unsaved Work?").size(20).color(dark_text),
                     Space::with_height(Length::Fixed(15.0)),
-                    text("An auto-save file was found from a previous session.").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
-                    text("Would you like to recover it?").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
+                    text("An auto-save file was found from a previous session.")
+                        .size(14)
+                        .color(Color::from_rgb(0.3, 0.3, 0.3)),
+                    text("Would you like to recover it?")
+                        .size(14)
+                        .color(Color::from_rgb(0.3, 0.3, 0.3)),
                     Space::with_height(Length::Fixed(20.0)),
                     row![
                         button(text("Recover").size(14))
@@ -1650,7 +1770,7 @@ impl PrintLayout {
                     .spacing(10),
                 ]
                 .align_x(Alignment::Center)
-                .spacing(5)
+                .spacing(5),
             )
             .padding(40)
             .style(|_theme| container::Style {
@@ -1665,26 +1785,28 @@ impl PrintLayout {
 
             return iced::widget::stack![
                 base,
-                opaque(
-                    mouse_area(
-                        center(modal_content)
-                            .style(|_theme| container::Style {
-                                background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                                ..Default::default()
-                            })
-                    )
-                )
+                opaque(mouse_area(center(modal_content).style(|_theme| {
+                    container::Style {
+                        background: Some(iced::Background::Color(Color::from_rgba(
+                            0.0, 0.0, 0.0, 0.5,
+                        ))),
+                        ..Default::default()
+                    }
+                })))
             ]
             .into();
         }
-        
+
         // Show recent files popup if toggled
         if self.show_recent_files_menu && !self.preferences.recent_files.is_empty() {
-            let recent_items: Vec<Element<'_, Message>> = self.preferences.recent_files
+            let recent_items: Vec<Element<'_, Message>> = self
+                .preferences
+                .recent_files
                 .iter()
                 .take(10)
                 .map(|path| {
-                    let display_name = path.file_name()
+                    let display_name = path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("Unknown");
                     let path_clone = path.clone();
@@ -1695,40 +1817,34 @@ impl PrintLayout {
                         .into()
                 })
                 .collect();
-            
-            let popup_content = container(
-                column(recent_items)
-                    .spacing(2)
-                    .width(Length::Fixed(250.0))
-            )
-            .padding(10)
-            .style(|_theme| container::Style {
-                background: Some(iced::Background::Color(Color::WHITE)),
-                border: iced::Border {
-                    color: Color::from_rgb(0.7, 0.7, 0.7),
-                    width: 1.0,
-                    radius: 4.0.into(),
-                },
-                ..Default::default()
-            });
+
+            let popup_content =
+                container(column(recent_items).spacing(2).width(Length::Fixed(250.0)))
+                    .padding(10)
+                    .style(|_theme| container::Style {
+                        background: Some(iced::Background::Color(Color::WHITE)),
+                        border: iced::Border {
+                            color: Color::from_rgb(0.7, 0.7, 0.7),
+                            width: 1.0,
+                            radius: 4.0.into(),
+                        },
+                        ..Default::default()
+                    });
 
             // Position the popup near the top-left where the buttons are
-            let popup_positioned = container(
-                column![
-                    Space::with_height(Length::Fixed(50.0)), // Offset from top
-                    row![
-                        Space::with_width(Length::Fixed(400.0)), // Offset from left to align with Recent button
-                        popup_content,
-                    ],
-                ]
-            )
+            let popup_positioned = container(column![
+                Space::with_height(Length::Fixed(50.0)), // Offset from top
+                row![
+                    Space::with_width(Length::Fixed(400.0)), // Offset from left to align with Recent button
+                    popup_content,
+                ],
+            ])
             .width(Length::Fill)
             .height(Length::Fill);
 
             return iced::widget::stack![
                 base,
-                mouse_area(popup_positioned)
-                    .on_press(Message::ToggleRecentFilesMenu)
+                mouse_area(popup_positioned).on_press(Message::ToggleRecentFilesMenu)
             ]
             .into();
         }
@@ -1747,10 +1863,12 @@ impl PrintLayout {
                             .width(Length::Fixed(250.0))
                             .height(Length::Fixed(12.0)),
                         Space::with_height(Length::Fixed(15.0)),
-                        text("Please wait...").size(14).color(Color::from_rgb(0.4, 0.4, 0.4)),
+                        text("Please wait...")
+                            .size(14)
+                            .color(Color::from_rgb(0.4, 0.4, 0.4)),
                     ]
                     .align_x(Alignment::Center)
-                    .spacing(5)
+                    .spacing(5),
                 )
                 .padding(40)
                 .style(|_theme| container::Style {
@@ -1765,15 +1883,14 @@ impl PrintLayout {
 
                 iced::widget::stack![
                     base,
-                    opaque(
-                        mouse_area(
-                            center(modal_content)
-                                .style(|_theme| container::Style {
-                                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                                    ..Default::default()
-                                })
-                        )
-                    )
+                    opaque(mouse_area(center(modal_content).style(|_theme| {
+                        container::Style {
+                            background: Some(iced::Background::Color(Color::from_rgba(
+                                0.0, 0.0, 0.0, 0.5,
+                            ))),
+                            ..Default::default()
+                        }
+                    })))
                 ]
                 .into()
             }
@@ -1782,16 +1899,20 @@ impl PrintLayout {
                     column![
                         text("PRINTING").size(24).color(dark_text),
                         Space::with_height(Length::Fixed(15.0)),
-                        text("[>>]  Sending to printer...").size(16).color(dark_text),
+                        text("[>>]  Sending to printer...")
+                            .size(16)
+                            .color(dark_text),
                         Space::with_height(Length::Fixed(20.0)),
                         progress_bar(0.0..=100.0, 70.0)
                             .width(Length::Fixed(250.0))
                             .height(Length::Fixed(12.0)),
                         Space::with_height(Length::Fixed(15.0)),
-                        text("Please wait...").size(14).color(Color::from_rgb(0.4, 0.4, 0.4)),
+                        text("Please wait...")
+                            .size(14)
+                            .color(Color::from_rgb(0.4, 0.4, 0.4)),
                     ]
                     .align_x(Alignment::Center)
-                    .spacing(5)
+                    .spacing(5),
                 )
                 .padding(40)
                 .style(|_theme| container::Style {
@@ -1806,15 +1927,14 @@ impl PrintLayout {
 
                 iced::widget::stack![
                     base,
-                    opaque(
-                        mouse_area(
-                            center(modal_content)
-                                .style(|_theme| container::Style {
-                                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                                    ..Default::default()
-                                })
-                        )
-                    )
+                    opaque(mouse_area(center(modal_content).style(|_theme| {
+                        container::Style {
+                            background: Some(iced::Background::Color(Color::from_rgba(
+                                0.0, 0.0, 0.0, 0.5,
+                            ))),
+                            ..Default::default()
+                        }
+                    })))
                 ]
                 .into()
             }
@@ -1823,16 +1943,20 @@ impl PrintLayout {
                     column![
                         text("[OK]").size(36).color(Color::from_rgb(0.2, 0.7, 0.3)),
                         Space::with_height(Length::Fixed(15.0)),
-                        text("Print Job Sent Successfully!").size(18).color(dark_text),
+                        text("Print Job Sent Successfully!")
+                            .size(18)
+                            .color(dark_text),
                         Space::with_height(Length::Fixed(10.0)),
-                        text(format!("Job ID: {}", job_id)).size(13).color(Color::from_rgb(0.4, 0.4, 0.4)),
+                        text(format!("Job ID: {}", job_id))
+                            .size(13)
+                            .color(Color::from_rgb(0.4, 0.4, 0.4)),
                         Space::with_height(Length::Fixed(20.0)),
                         button(text("OK").size(14))
                             .on_press(Message::DismissPrintStatus)
                             .padding(Padding::from([10, 40])),
                     ]
                     .align_x(Alignment::Center)
-                    .spacing(5)
+                    .spacing(5),
                 )
                 .padding(40)
                 .style(|_theme| container::Style {
@@ -1847,15 +1971,14 @@ impl PrintLayout {
 
                 iced::widget::stack![
                     base,
-                    opaque(
-                        mouse_area(
-                            center(modal_content)
-                                .style(|_theme| container::Style {
-                                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                                    ..Default::default()
-                                })
-                        )
-                    )
+                    opaque(mouse_area(center(modal_content).style(|_theme| {
+                        container::Style {
+                            background: Some(iced::Background::Color(Color::from_rgba(
+                                0.0, 0.0, 0.0, 0.5,
+                            ))),
+                            ..Default::default()
+                        }
+                    })))
                 ]
                 .into()
             }
@@ -1873,7 +1996,7 @@ impl PrintLayout {
                             .padding(Padding::from([10, 40])),
                     ]
                     .align_x(Alignment::Center)
-                    .spacing(5)
+                    .spacing(5),
                 )
                 .padding(40)
                 .style(|_theme| container::Style {
@@ -1888,15 +2011,14 @@ impl PrintLayout {
 
                 iced::widget::stack![
                     base,
-                    opaque(
-                        mouse_area(
-                            center(modal_content)
-                                .style(|_theme| container::Style {
-                                    background: Some(iced::Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                                    ..Default::default()
-                                })
-                        )
-                    )
+                    opaque(mouse_area(center(modal_content).style(|_theme| {
+                        container::Style {
+                            background: Some(iced::Background::Color(Color::from_rgba(
+                                0.0, 0.0, 0.0, 0.5,
+                            ))),
+                            ..Default::default()
+                        }
+                    })))
                 ]
                 .into()
             }
@@ -1906,14 +2028,15 @@ impl PrintLayout {
     pub fn title(&self) -> String {
         let base_title = match &self.current_file {
             Some(path) => {
-                let filename = path.file_name()
+                let filename = path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("Unnamed");
                 format!("Print Layout - {}", filename)
             }
             None => "Print Layout".to_string(),
         };
-        
+
         if self.is_modified {
             format!("{}*", base_title)
         } else {

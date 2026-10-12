@@ -1,7 +1,7 @@
 // config.rs - Configuration and preferences management
 // Phase 5: Persistence & State Management
 
-use crate::layout::{Layout, PaperSize, PaperType, PrintQuality, ColorMode, Orientation};
+use crate::layout::{ColorMode, Layout, Orientation, PaperSize, PaperType, PrintQuality};
 use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -105,11 +105,12 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     pub fn new() -> Result<Self, std::io::Error> {
-        let proj_dirs = ProjectDirs::from("", "", "print_layout")
-            .ok_or_else(|| std::io::Error::new(
+        let proj_dirs = ProjectDirs::from("", "", "print_layout").ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "Could not determine config directory"
-            ))?;
+                "Could not determine config directory",
+            )
+        })?;
 
         let config_dir = proj_dirs.config_dir().to_path_buf();
         let cache_dir = proj_dirs.cache_dir().to_path_buf();
@@ -128,7 +129,7 @@ impl ConfigManager {
     /// Load user preferences from config file
     pub fn load_config(&self) -> UserPreferences {
         let config_path = self.config_dir.join("config.json");
-        
+
         if !config_path.exists() {
             log::info!("Config file not found, using defaults");
             return UserPreferences::default();
@@ -156,30 +157,34 @@ impl ConfigManager {
     pub fn save_config(&self, prefs: &UserPreferences) -> Result<(), std::io::Error> {
         let config_path = self.config_dir.join("config.json");
         let json = serde_json::to_string_pretty(prefs)?;
-        
+
         // Atomic write: write to temp file, then rename
         let temp_path = config_path.with_extension("tmp");
         fs::write(&temp_path, json)?;
         fs::rename(temp_path, &config_path)?;
-        
+
         log::info!("Saved config to {:?}", config_path);
         Ok(())
     }
 
     /// Save a project layout to file
-    pub fn save_layout(&self, project: &ProjectLayout, path: &PathBuf) -> Result<(), std::io::Error> {
+    pub fn save_layout(
+        &self,
+        project: &ProjectLayout,
+        path: &PathBuf,
+    ) -> Result<(), std::io::Error> {
         let json = serde_json::to_string_pretty(project)?;
-        
+
         // Create backup if file exists
         if path.exists() {
             self.create_backup(path)?;
         }
-        
+
         // Atomic write
         let temp_path = path.with_extension("tmp");
         fs::write(&temp_path, json)?;
         fs::rename(temp_path, path)?;
-        
+
         log::info!("Saved layout to {:?}", path);
         Ok(())
     }
@@ -189,7 +194,7 @@ impl ConfigManager {
         let contents = fs::read_to_string(path)?;
         let project: ProjectLayout = serde_json::from_str(&contents)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        
+
         log::info!("Loaded layout from {:?}", path);
         Ok(project)
     }
@@ -197,50 +202,52 @@ impl ConfigManager {
     /// Create a backup of a layout file
     fn create_backup(&self, path: &PathBuf) -> Result<(), std::io::Error> {
         let backup_dir = self.config_dir.join("backups");
-        let filename = path.file_stem()
+        let filename = path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("layout");
-        
+
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
         let backup_name = format!("{}_backup_{}.pxl", filename, timestamp);
         let backup_path = backup_dir.join(backup_name);
-        
+
         fs::copy(path, &backup_path)?;
         log::info!("Created backup at {:?}", backup_path);
-        
+
         // Keep only last 5 backups
         self.cleanup_old_backups(&backup_dir, filename)?;
-        
+
         Ok(())
     }
 
     /// Remove old backups, keeping only the 5 most recent
-    fn cleanup_old_backups(&self, backup_dir: &PathBuf, filename: &str) -> Result<(), std::io::Error> {
+    fn cleanup_old_backups(
+        &self,
+        backup_dir: &PathBuf,
+        filename: &str,
+    ) -> Result<(), std::io::Error> {
         let mut backups: Vec<_> = fs::read_dir(backup_dir)?
             .filter_map(|entry| entry.ok())
             .filter(|entry| {
-                entry.file_name()
+                entry
+                    .file_name()
                     .to_str()
                     .map(|name| name.starts_with(filename) && name.ends_with(".pxl"))
                     .unwrap_or(false)
             })
             .collect();
-        
+
         // Sort by modification time, newest first
-        backups.sort_by_key(|entry| {
-            entry.metadata()
-                .and_then(|m| m.modified())
-                .ok()
-        });
+        backups.sort_by_key(|entry| entry.metadata().and_then(|m| m.modified()).ok());
         backups.reverse();
-        
+
         // Remove old backups beyond the 5 most recent
         for backup in backups.iter().skip(5) {
             if let Err(e) = fs::remove_file(backup.path()) {
                 log::warn!("Failed to remove old backup: {}", e);
             }
         }
-        
+
         Ok(())
     }
 
@@ -279,10 +286,10 @@ impl ConfigManager {
     pub fn add_recent_file(&self, prefs: &mut UserPreferences, path: PathBuf) {
         // Remove if already exists
         prefs.recent_files.retain(|p| p != &path);
-        
+
         // Add to front
         prefs.recent_files.insert(0, path);
-        
+
         // Keep only 10 most recent
         prefs.recent_files.truncate(10);
     }

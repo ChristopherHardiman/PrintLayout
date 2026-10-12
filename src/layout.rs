@@ -38,18 +38,18 @@ pub enum PaperSize {
     Tabloid,
     Ledger,
     // Photo sizes (inches converted to mm)
-    Photo3_5x5,      // 3.5" × 5" (88.9 × 127mm)
-    Photo4x6,        // 4" × 6" (101.6 × 152.4mm)
-    Photo5x5,        // 5" × 5" Square (127 × 127mm)
-    Photo5x7,        // 5" × 7" (127 × 177.8mm)
-    Photo7x10,       // 7" × 10" (177.8 × 254mm)
-    Photo8x10,       // 8" × 10" (203.2 × 254mm)
-    Photo10x12,      // 10" × 12" (254 × 304.8mm)
-    Photo11x17,      // 11" × 17" Ledger (279.4 × 431.8mm)
-    Photo12x12,      // 12" × 12" Square (304.8 × 304.8mm)
-    Photo13x19,      // 13" × 19" A3+ (330.2 × 482.6mm)
-    Panorama,        // 210 × 594mm
-    CustomLarge,     // Custom up to 13" × 39" (330.2 × 990.6mm)
+    Photo3_5x5,  // 3.5" × 5" (88.9 × 127mm)
+    Photo4x6,    // 4" × 6" (101.6 × 152.4mm)
+    Photo5x5,    // 5" × 5" Square (127 × 127mm)
+    Photo5x7,    // 5" × 7" (127 × 177.8mm)
+    Photo7x10,   // 7" × 10" (177.8 × 254mm)
+    Photo8x10,   // 8" × 10" (203.2 × 254mm)
+    Photo10x12,  // 10" × 12" (254 × 304.8mm)
+    Photo11x17,  // 11" × 17" Ledger (279.4 × 431.8mm)
+    Photo12x12,  // 12" × 12" Square (304.8 × 304.8mm)
+    Photo13x19,  // 13" × 19" A3+ (330.2 × 482.6mm)
+    Panorama,    // 210 × 594mm
+    CustomLarge, // Custom up to 13" × 39" (330.2 × 990.6mm)
     // Custom size (width, height in mm)
     Custom(f32, f32),
 }
@@ -162,14 +162,15 @@ impl Default for PaperSize {
 }
 
 /// Represents paper type for printing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PaperType {
-    Plain,              // Plain Paper
-    SuperHighGloss,     // Photo Paper Pro Platinum
-    Glossy,             // Photo Paper Plus Glossy II, Photo Paper Glossy
-    SemiGloss,          // Photo Paper Plus Semi-Gloss, Photo Paper Pro Luster
-    Matte,              // Matte Photo Paper, Photo Paper Premium Matte
-    FineArt,            // Premium Fine Art Rough
+    #[default]
+    Plain, // Plain Paper
+    SuperHighGloss, // Photo Paper Pro Platinum
+    Glossy,         // Photo Paper Plus Glossy II, Photo Paper Glossy
+    SemiGloss,      // Photo Paper Plus Semi-Gloss, Photo Paper Pro Luster
+    Matte,          // Matte Photo Paper, Photo Paper Premium Matte
+    FineArt,        // Premium Fine Art Rough
 }
 
 impl std::fmt::Display for PaperType {
@@ -196,12 +197,6 @@ impl PaperType {
             PaperType::Matte => "Matte",
             PaperType::FineArt => "Fine Art",
         }
-    }
-}
-
-impl Default for PaperType {
-    fn default() -> Self {
-        PaperType::Plain
     }
 }
 

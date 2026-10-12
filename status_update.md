@@ -7,7 +7,7 @@
 **Dependencies:** Iced 0.13.1, `image` 0.25, `rfd` 0.15, `tokio` 1 (`rust-version = "1.75"`)
 **GitHub:** no open issues, no PRs
 
-This was written from a review of the docs ([status.md](status.md), [README.md](README.md), [CHANGELOG.md](CHANGELOG.md), [USAGE.md](USAGE.md), [INSTALL.md](INSTALL.md), [AGENTS.md](AGENTS.md), [GEMINI.md](GEMINI.md), [upgrade_plan.md](upgrade_plan.md), [delayed_upgrade_plan.md](delayed_upgrade_plan.md)) and the code. I also ran the build, formatter, linter and tests.
+This was written from a review of the docs ([status.md](status.md), [README.md](README.md), [CHANGELOG.md](CHANGELOG.md), [USAGE.md](USAGE.md), [INSTALL.md](INSTALL.md), [AGENTS.md](AGENTS.md), [GEMINI.md](GEMINI.md), [upgrade_plan.md](upgrade_plan.md)) and the code. I also ran the build, formatter, linter and tests.
 
 ---
 
@@ -16,8 +16,7 @@ This was written from a review of the docs ([status.md](status.md), [README.md](
 - **The shipped Iced app (v0.2.1) is feature-complete for its original scope (Phases 1–7).** It builds and runs, and the 2 unit tests pass.
 - **Direction decided: 100% Rust with Iced.** The Tauri + web rewrite was dropped on 2026-10-11 and its prototypes, plan docs and branch were removed (section 5). The next step is upgrading from Iced 0.13 to 0.14 (section 9).
 - **There are no keyboard shortcuts in the code, although README and GEMINI.md list them.** There is also no undo/redo, multi-page support or PDF export.
-- **Code quality gates fail.** `cargo clippy -- -D warnings` reports 8 errors and `cargo fmt --check` reports 8 diffs. CI enforces both, so CI would currently fail.
-- **A few leftover files are still uncommitted** (section 6).
+- **Quality gates are green again (2026-10-11).** `make check` (fmt, clippy with `-D warnings`, tests) passes. This is the baseline for the Iced upgrade.
 - **A trial upgrade to Iced 0.14.0 compiled cleanly after about 9 mechanical edits** (section 9). I did not run the app or change the repo.
 
 ---
@@ -46,11 +45,11 @@ Code size: about 3,800 lines of Rust. [main.rs](src/main.rs) is 1,927 lines, [pr
 |---|---|
 | `cargo build` | ✅ passes (about 50 s cold) |
 | `cargo test` | ✅ 2 pass. Both are in [printing.rs](src/printing.rs): `test_printer_discovery` and `test_printer_capabilities`. |
-| `cargo clippy -- -D warnings` | ❌ 8 errors: 6× `manual_range_contains` (mainly the rotation checks near line 344 of [printing.rs](src/printing.rs)), 1× collapsible `if`, 1× derivable `impl` |
-| `cargo fmt --check` | ❌ 8 files/hunks with diffs |
+| `cargo clippy -- -D warnings` | ✅ passes (10 lints fixed: range `contains` checks, a collapsible `if`, a derivable `Default`, an `Option::map`) |
+| `cargo fmt --check` | ✅ passes (the code was reformatted) |
 | Test coverage | ⚠️ There are no tests for layout math, serialization, config or canvas. [AGENTS.md](AGENTS.md) asks for them. |
 
-The clippy errors probably come from the newer toolchain (clippy 1.99), but they still fail the project's own `make check`.
+Behaviour is unchanged by these fixes.
 
 ---
 
@@ -61,8 +60,8 @@ The clippy errors probably come from the newer toolchain (clippy 1.99), but they
 3. **README says users can drag files onto the canvas.** I found no file-drop handling in `src/main.rs`.
 4. **README lists a log file at `~/.cache/print_layout/app.log`.** I found no file logging, and `~/.cache/print_layout/` is currently empty.
 5. **[status.md](status.md) is stale.** It lists "Undo/redo" and "Multi-page" as planned but does not point to the plan for them. It says v0.2.0 was tagged and that Color Management was a tab, but v0.2.1 removed that tab. Its line counts are wrong: main.rs is 1,927 lines (listed as 1,803) and printing.rs is 599 (listed as 419).
-6. **Version numbering is confusing.** [delayed_upgrade_plan.md](delayed_upgrade_plan.md) is titled "Upgrade Plan v0.2.0 / Q1 2026", but 0.2.0 and 0.2.1 are already released. [upgrade_plan.md](upgrade_plan.md) on `main` is an identical copy of it.
-7. **[Cargo.toml](Cargo.toml) and [.cargo/config.toml](.cargo/config.toml) disagree on `codegen-units`.** [Cargo.toml](Cargo.toml) sets `lto = "thin"` with `codegen-units = 1`. The uncommitted [.cargo/config.toml](.cargo/config.toml) change sets `thin` with 4. [status.md](status.md) targets about 7 MB for the binary, but the release binary was not measured.
+6. **Version numbering is confusing.** [upgrade_plan.md](upgrade_plan.md) is titled "Upgrade Plan v0.2.0 / Q1 2026", but 0.2.0 and 0.2.1 are already released.
+7. **[Cargo.toml](Cargo.toml) and [.cargo/config.toml](.cargo/config.toml) disagree on `codegen-units`.** [Cargo.toml](Cargo.toml) sets `lto = "thin"` with `codegen-units = 1`. The [.cargo/config.toml](.cargo/config.toml) setting (which Cargo applies over the manifest) sets `thin` with 4. [status.md](status.md) targets about 7 MB for the binary, but the release binary was not measured.
 
 ---
 
@@ -77,14 +76,16 @@ The Phase 0 benchmarks were never run, and no results were saved.
 
 ---
 
-## 6. Repository hygiene (working tree)
+## 6. Repository hygiene
 
-- Committed on 2026-10-11: [.cargo/config.toml](.cargo/config.toml) (thin LTO and 4 codegen units to cut link-time memory), [AGENTS.md](AGENTS.md) and this file.
-- Deliberately not committed: [.gitignore](.gitignore) (adds a global `*.png` rule), [delayed_upgrade_plan.md](delayed_upgrade_plan.md) and [layout.ron](layout.ron).
-- [delayed_upgrade_plan.md](delayed_upgrade_plan.md) is byte-identical to the tracked [upgrade_plan.md](upgrade_plan.md), so one of them is redundant.
-- [layout.ron](layout.ron) is a stray `LayoutDocument(... Column ...)` file in RON format. Nothing in the repo reads it (`ron` is not a dependency), so it looks like leftover output from the dropped prototypes and can probably be deleted.
-- The `*.png` ignore rule was probably added for [assets/prototype_images/](assets/prototype_images/): 9 untracked screenshots (about 31 MB) that were only used by the dropped prototypes. They can be deleted now, and the ignore rule reconsidered.
-- `main` and `master` both exist as branches. CI is configured for `main`/`develop`. [GEMINI.md](GEMINI.md) refers to `src/canvas.rs` and `src/ui.rs`, which no longer exist.
+Cleaned up on 2026-10-11:
+- Deleted the stray `layout.ron`, the duplicate `delayed_upgrade_plan.md` (identical to [upgrade_plan.md](upgrade_plan.md)) and the 9 untracked prototype screenshots in `assets/prototype_images/`.
+- Dropped the uncommitted global `*.png` rule from `.gitignore`, so future PNGs (for example README screenshots) are not hidden.
+- [.cargo/config.toml](.cargo/config.toml) (thin LTO) and [AGENTS.md](AGENTS.md) were committed earlier.
+
+Still open:
+- `main` and `master` both exist as branches. CI is configured for `main`/`develop`.
+- [GEMINI.md](GEMINI.md) refers to `src/canvas.rs` and `src/ui.rs`, which no longer exist.
 
 ---
 
@@ -103,9 +104,9 @@ The Phase 0 benchmarks were never run, and no results were saved.
 
 ## 8. Suggested next steps
 
-1. Fix clippy and fmt so `make check` is green again (baseline for the Iced upgrade).
-2. Commit or discard the uncommitted changes, delete [layout.ron](layout.ron), and remove the duplicate plan file.
-3. Delete [assets/prototype_images/](assets/prototype_images/) and reconsider the global `*.png` ignore rule.
+1. ~~Fix clippy and fmt~~ – done.
+2. ~~Clean up uncommitted and stray files~~ – done.
+3. ~~Delete prototype images and the `*.png` ignore rule~~ – done.
 4. Upgrade to Iced 0.14 (section 9).
 5. Implement the documented keyboard shortcuts with `iced::keyboard::listen`, or remove them from the docs.
 6. Add unit tests for layout math, `.pxl` serialization and config.
@@ -127,7 +128,7 @@ The Phase 0 benchmarks were never run, and no results were saved.
 **Trial result:** in a throwaway copy of the project outside this repo, bumping `iced` to `"0.14"` and fixing the errors below gave a clean `cargo check`, with 2/2 tests passing and no new warnings. Clippy reports the same 8 errors as today. The dependency count in `Cargo.lock` went from 584 to 557. The app has **not been run** (no display session), so the runtime checks in step 5 are still to do.
 
 ### Step 0 – Prepare
-- [ ] Do the cleanup in section 8 first, so the upgrade diff is only the upgrade.
+- [x] Cleanup from section 8 is done, so the upgrade diff will be only the upgrade.
 - [ ] Create a branch such as `iced-0.14`.
 - [ ] Record the baseline: `cargo build --release` size (the 7 MB target in [status.md](status.md) is unmeasured), and a manual smoke test on 0.13 (add images, drag, resize, save/load, one test print).
 

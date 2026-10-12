@@ -53,10 +53,11 @@ impl PrinterOption {
     pub fn default_value(&self) -> Option<&str> {
         self.default_index.map(|i| self.values[i].value.as_str())
     }
-    
+
     /// Get the currently selected or default value
     pub fn current_value(&self) -> Option<&str> {
-        self.values.iter()
+        self.values
+            .iter()
             .find(|v| v.is_default)
             .map(|v| v.value.as_str())
     }
@@ -74,27 +75,27 @@ impl PrinterCapabilities {
     pub fn get_option(&self, name: &str) -> Option<&PrinterOption> {
         self.options.iter().find(|o| o.name == name)
     }
-    
+
     /// Get the InputSlot (Media Source) option
     pub fn input_slot(&self) -> Option<&PrinterOption> {
         self.get_option("InputSlot")
     }
-    
+
     /// Get the MediaType option
     pub fn media_type(&self) -> Option<&PrinterOption> {
         self.get_option("MediaType")
     }
-    
+
     /// Get the ColorModel option
     pub fn color_model(&self) -> Option<&PrinterOption> {
         self.get_option("ColorModel")
     }
-    
+
     /// Get the cupsPrintQuality option
     pub fn print_quality(&self) -> Option<&PrinterOption> {
         self.get_option("cupsPrintQuality")
     }
-    
+
     /// Get the PageSize option (all supported paper sizes)
     pub fn page_sizes(&self) -> Option<&PrinterOption> {
         self.get_option("PageSize")
@@ -273,11 +274,11 @@ pub fn get_printer_capabilities(printer_name: &str) -> Result<PrinterCapabilitie
             for (i, val) in values_part.split_whitespace().enumerate() {
                 let is_default = val.starts_with('*');
                 let value = val.trim_start_matches('*').to_string();
-                
+
                 if is_default {
                     default_index = Some(i);
                 }
-                
+
                 values.push(PrinterOptionValue { value, is_default });
             }
 
@@ -290,7 +291,11 @@ pub fn get_printer_capabilities(printer_name: &str) -> Result<PrinterCapabilitie
         }
     }
 
-    log::info!("Found {} options for printer '{}'", options.len(), printer_name);
+    log::info!(
+        "Found {} options for printer '{}'",
+        options.len(),
+        printer_name
+    );
     Ok(PrinterCapabilities {
         printer_name: printer_name.to_string(),
         options,
@@ -324,7 +329,8 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
     );
 
     // Create white canvas
-    let mut img: RgbaImage = ImageBuffer::from_pixel(width_px, height_px, Rgba([255, 255, 255, 255]));
+    let mut img: RgbaImage =
+        ImageBuffer::from_pixel(width_px, height_px, Rgba([255, 255, 255, 255]));
 
     // Render each image
     for placed_image in &layout.images {
@@ -339,11 +345,11 @@ pub fn render_layout_to_image(layout: &Layout, dpi: u32) -> Result<RgbaImage, Pr
 
         // Apply rotation (rotation_degrees is in 90° increments)
         let rotation_normalized = ((placed_image.rotation_degrees % 360.0) + 360.0) % 360.0;
-        let rotated = if rotation_normalized >= 85.0 && rotation_normalized <= 95.0 {
+        let rotated = if (85.0..=95.0).contains(&rotation_normalized) {
             source_img.rotate90()
-        } else if rotation_normalized >= 175.0 && rotation_normalized <= 185.0 {
+        } else if (175.0..=185.0).contains(&rotation_normalized) {
             source_img.rotate180()
-        } else if rotation_normalized >= 265.0 && rotation_normalized <= 275.0 {
+        } else if (265.0..=275.0).contains(&rotation_normalized) {
             source_img.rotate270()
         } else {
             source_img // 0 or other values = no rotation
@@ -411,12 +417,17 @@ fn load_image_for_print(path: &PathBuf) -> Result<image::DynamicImage, PrintErro
         .map_err(|e| PrintError::RenderError(format!("Cannot open image: {}", e)))?
         .with_guessed_format()
         .map_err(|e| PrintError::RenderError(format!("Cannot detect format: {}", e)))?;
-    
-    log::debug!("Loading image {:?}, detected format: {:?}", path, reader.format());
-    
-    let img = reader.decode()
+
+    log::debug!(
+        "Loading image {:?}, detected format: {:?}",
+        path,
+        reader.format()
+    );
+
+    let img = reader
+        .decode()
         .map_err(|e| PrintError::RenderError(format!("Cannot decode image: {}", e)))?;
-    
+
     Ok(img)
 }
 
@@ -469,10 +480,10 @@ pub fn send_to_printer(job: &PrintJob, temp_file: &Path) -> Result<String, Print
         }
     };
     cmd.arg("-o").arg(paper_option);
-    
+
     // For proper scaling, tell CUPS to fit the image to the page
     cmd.arg("-o").arg("fit-to-page");
-    
+
     // Add any extra options (InputSlot, MediaType, ColorModel, etc.)
     for (opt_name, opt_value) in &job.extra_options {
         let option_str = format!("{}={}", opt_name, opt_value);
@@ -565,7 +576,7 @@ mod tests {
             }
         }
     }
-    
+
     #[test]
     fn test_printer_capabilities() {
         // First discover printers
@@ -576,7 +587,7 @@ mod tests {
                 return;
             }
         };
-        
+
         // Query capabilities for each printer
         for printer in &printers {
             println!("\n=== Capabilities for '{}' ===", printer.name);
