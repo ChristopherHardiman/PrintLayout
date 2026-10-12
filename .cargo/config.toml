@@ -1,4 +1,7 @@
 [profile.release]
 opt-level = 3
-lto = true
-codegen-units = 1
+# Changed from full LTO to thin LTO - much lower memory usage
+# Full LTO (lto = true) loads entire program into memory
+lto = "thin"
+# Increased from 1 to allow some parallelism and reduce peak memory
+codegen-units = 4
