@@ -2,18 +2,78 @@
 
 **Target Version:** 0.2.0  
 **Target Date:** Q1 2026  
-**Focus Areas:** Multi-page support, PDF export, Undo/Redo system
+**Focus Areas:** Iced 0.14 upgrade, Undo/Redo system, Multi-page support, PDF export
 
 ---
 
 ## Executive Summary
 
-This document outlines the implementation plan for three major features requested for PrintLayout v0.2.0. These features are interconnected and will significantly enhance the application's capabilities for professional print layout work.
+This document outlines the Iced 0.14 upgrade and three major features planned for PrintLayout. The Iced upgrade is a prerequisite for feature work; the features will significantly enhance the application's capabilities for professional print layout work.
 
 ### Priority Order
-1. **Undo/Redo System** - Foundation for user experience (2 weeks)
-2. **Multi-page Support** - Core feature enhancement (3 weeks)
-3. **PDF Export** - Output flexibility (2 weeks)
+1. **Iced 0.14 Upgrade** - Update the GUI framework and Rust toolchain before feature work
+2. **Undo/Redo System** - Foundation for user experience (2 weeks)
+3. **Multi-page Support** - Core feature enhancement (3 weeks)
+4. **PDF Export** - Output flexibility (2 weeks)
+
+---
+
+## Platform Upgrade: Iced 0.14
+
+### Overview
+
+Upgrade the application from Iced 0.13 to 0.14 before starting the planned features. A trial migration in a throwaway copy compiled successfully after the API changes below; the application still needs runtime and manual verification.
+
+Iced 0.14 brings concurrent image decoding and uploading, a reactive renderer, headless and end-to-end testing support, and a unified keyboard subscription API. Keep the project edition at 2021.
+
+### Implementation Steps
+
+#### Step 1: Establish a Baseline
+- [x] Create an upgrade branch, such as `iced-0.14`.
+- [x] Record the release binary size: 23,198,248 bytes (23.2 MB) on Iced 0.13. Baseline `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test` (2 tests) all passed.
+- [ ] Run a manual Iced 0.13 smoke test: add images, drag and resize them, save/load a layout, and run a test print. (Skipped; compare against 0.14 behavior by hand in Step 4.)
+
+#### Step 2: Update the Toolchain and Dependency
+- [x] Set the project's `rust-version` to at least 1.88, required by Iced 0.14 dependencies.
+- [x] Update the RPM `BuildRequires` and Rust-version references in GEMINI.md. README.md has no Rust version reference.
+- [ ] Confirm Fedora/COPR and GitHub Actions build environments provide Rust 1.88 or newer. CI uses `dtolnay/rust-toolchain@stable` and the RPM workflow uses `fedora:latest`, so both should qualify; the COPR chroots are still to be checked.
+- [x] Change the Iced dependency in Cargo.toml to version `0.14` and update the lockfile (`Cargo.lock` is untracked, resolved to iced 0.14.0).
+
+#### Step 3: Migrate Iced APIs (done)
+
+| Area | Iced 0.13 | Iced 0.14 |
+|---|---|---|
+| Application startup | `application(title, update, view).run_with(new)` | `application(new, update, view).title(...).run()` |
+| Rules | `horizontal_rule(1)`, `vertical_rule(1)` | `rule::horizontal(1)`, `rule::vertical(1)` |
+| Spacing | `Space::with_width(w)`, `Space::with_height(h)` | `Space::new().width(w)`, `Space::new().height(h)` |
+| Checkboxes | `checkbox("label", checked)` | `checkbox(checked).label("label")` |
+| Progress bar sizing | `.width(..).height(..)` | `.length(..).girth(..)` |
+| Default theme | `Theme::default()` | Use `Theme::Light` or implement system-theme behavior |
+| Canvas events | `canvas::Event`; return `(Status, Option<Msg>)` | `&iced::Event`; return `Option<canvas::Action<Msg>>` |
+| Canvas event matching | `canvas::Event::Mouse(..)` | `iced::Event::Mouse(..)` |
+| Canvas response | `(Status::Captured, Some(msg))` / `(Status::Ignored, None)` | `Some(canvas::Action::publish(msg).and_capture())` / `None` |
+
+#### Step 4: Verify
+- [x] Run `cargo fmt --check`, `cargo build`, `cargo test`, and `cargo clippy -- -D warnings`; all pass, matching the baseline.
+- [x] Build with `cargo build --release` and compare binary size with the baseline: 23,286,536 bytes (+0.4%). Link memory was not measured.
+- [x] Launch smoke test on Wayland: the window and wgpu surface are created, printers are discovered, and there is no panic.
+- [ ] On Wayland and X11, manually check image loading, canvas drag/resize/selection, transforms, settings controls, dialogs, save/load, auto-save, recovery, and printing.
+- [ ] Confirm file dialogs continue to work through xdg-portal.
+
+#### Step 5: Ship
+- [ ] Update CHANGELOG.md and status.md with the upgrade result and any remaining limitations.
+- [ ] Bump the application version as appropriate, then merge and tag after CI and RPM workflows pass.
+
+### Optional Follow-ups
+- Implement the documented keyboard shortcuts using `keyboard::listen`.
+- Evaluate Iced 0.14 widgets (`float`, `pin`, `grid`, `table`) and `Column::wrap` for future UI work.
+- Add headless end-to-end tests where useful.
+
+### Risks
+- Rust 1.88 may not be available in all supported RPM build environments.
+- Iced 0.14 changes layout rules, quad rendering, and theme palette generation; spacing and colors may shift.
+- The canvas event API rewrite needs careful manual testing for drag and resize behavior.
+- Iced is pre-1.0, so future releases may introduce more breaking API changes.
 
 ---
 
@@ -453,13 +513,14 @@ pub enum Message {
 ## Integration Timeline
 
 ```
-Week 1-2:   Undo/Redo System
-Week 3-5:   Multi-Page Support
-Week 6-7:   PDF Export
-Week 8:     Integration testing, bug fixes, documentation
+Before Week 1: Iced 0.14 upgrade and verification
+Week 1-2:      Undo/Redo System
+Week 3-5:      Multi-Page Support
+Week 6-7:      PDF Export
+Week 8:        Integration testing, bug fixes, documentation
 ```
 
-### Total Estimated Effort: 8 weeks
+### Feature Work Estimate: 8 weeks, after the Iced upgrade
 
 ---
 

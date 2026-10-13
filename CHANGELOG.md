@@ -5,6 +5,14 @@ All notable changes to Print Layout will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Upgraded the GUI framework from Iced 0.13 to Iced 0.14
+- Minimum supported Rust version raised from 1.75 to 1.88 (required by Iced 0.14)
+- Canvas input handling migrated to the Iced 0.14 `canvas::Action` API
+- The application now uses the light theme explicitly, because Iced 0.14 removed `Theme::default()`
+
 ## [0.2.1] - 2025-12-04
 
 ### Added

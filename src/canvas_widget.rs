@@ -1,5 +1,5 @@
 // canvas_widget.rs - Canvas widget implementation with image rendering
-// Updated for Iced 0.13 with draw_image support
+// Updated for Iced 0.14 with draw_image support
 
 use crate::layout::{Layout, PlacedImage};
 use iced::mouse::{self, Cursor};
@@ -302,7 +302,7 @@ impl LayoutCanvas {
 
             let bounds = Rectangle::new(Point::new(x, y), Size::new(width, height));
 
-            // Try to draw transformed image using Iced 0.13's draw_image
+            // Try to draw transformed image using Iced 0.14's draw_image
             if let Some(handle) = image_cache.get_transformed_handle(img, &mut source_cache) {
                 let image = Image::new(handle);
                 frame.draw_image(bounds, image);
@@ -460,57 +460,43 @@ impl Program<CanvasMessage> for LayoutCanvas {
     fn update(
         &self,
         _state: &mut Self::State,
-        event: canvas::Event,
+        event: &iced::Event,
         bounds: Rectangle,
         cursor: Cursor,
-    ) -> (iced::event::Status, Option<CanvasMessage>) {
-        if let Some(cursor_position) = cursor.position_in(bounds) {
-            match event {
-                canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                    // First check if we're clicking on a resize handle
-                    if let Some((id, handle)) =
-                        self.get_resize_handle_at_point(cursor_position.x, cursor_position.y)
-                    {
-                        return (
-                            iced::event::Status::Captured,
-                            Some(CanvasMessage::StartResize(id, handle)),
-                        );
-                    }
+    ) -> Option<canvas::Action<CanvasMessage>> {
+        let cursor_position = cursor.position_in(bounds)?;
 
-                    // Otherwise check for image selection/move
-                    let x_mm = self.pixels_to_mm(cursor_position.x);
-                    let y_mm = self.pixels_to_mm(cursor_position.y);
-
-                    if let Some(image) = self.layout.find_image_at_point(x_mm, y_mm) {
-                        return (
-                            iced::event::Status::Captured,
-                            Some(CanvasMessage::SelectImage(image.id.clone())),
-                        );
-                    } else {
-                        return (
-                            iced::event::Status::Captured,
-                            Some(CanvasMessage::DeselectAll),
-                        );
-                    }
-                }
-                canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-                    let x_mm = self.pixels_to_mm(cursor_position.x);
-                    let y_mm = self.pixels_to_mm(cursor_position.y);
-                    return (
-                        iced::event::Status::Captured,
-                        Some(CanvasMessage::MouseMoved(x_mm, y_mm)),
+        match event {
+            iced::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                // First check if we're clicking on a resize handle
+                if let Some((id, handle)) =
+                    self.get_resize_handle_at_point(cursor_position.x, cursor_position.y)
+                {
+                    return Some(
+                        canvas::Action::publish(CanvasMessage::StartResize(id, handle))
+                            .and_capture(),
                     );
                 }
-                canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                    return (
-                        iced::event::Status::Captured,
-                        Some(CanvasMessage::MouseReleased),
-                    );
-                }
-                _ => {}
+
+                // Otherwise check for image selection/move
+                let x_mm = self.pixels_to_mm(cursor_position.x);
+                let y_mm = self.pixels_to_mm(cursor_position.y);
+
+                let message = match self.layout.find_image_at_point(x_mm, y_mm) {
+                    Some(image) => CanvasMessage::SelectImage(image.id.clone()),
+                    None => CanvasMessage::DeselectAll,
+                };
+                Some(canvas::Action::publish(message).and_capture())
             }
+            iced::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let x_mm = self.pixels_to_mm(cursor_position.x);
+                let y_mm = self.pixels_to_mm(cursor_position.y);
+                Some(canvas::Action::publish(CanvasMessage::MouseMoved(x_mm, y_mm)).and_capture())
+            }
+            iced::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                Some(canvas::Action::publish(CanvasMessage::MouseReleased).and_capture())
+            }
+            _ => None,
         }
-
-        (iced::event::Status::Ignored, None)
     }
 }

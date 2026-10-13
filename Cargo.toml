@@ -11,7 +11,7 @@ documentation = "https://github.com/ChristopherHardiman/PrintLayout#readme"
 readme = "README.md"
 keywords = ["printing", "layout", "photo", "gui", "linux"]
 categories = ["multimedia::images", "gui"]
-rust-version = "1.75"
+rust-version = "1.88"
 exclude = [
     "packaging/*",
     "assets/*",
@@ -25,7 +25,7 @@ name = "print-layout"
 path = "src/main.rs"
 
 [dependencies]
-iced = { version = "0.13", features = ["canvas", "image", "tokio", "debug"] }
+iced = { version = "0.14", features = ["canvas", "image", "tokio", "debug"] }
 image = "0.25"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

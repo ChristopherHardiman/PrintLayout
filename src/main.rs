@@ -1,8 +1,7 @@
 use ::image::GenericImageView;
 use iced::widget::{
-    button, canvas, center, checkbox, column, container, horizontal_rule, image as iced_image,
-    mouse_area, opaque, pick_list, progress_bar, row, scrollable, text, text_input, vertical_rule,
-    Space,
+    button, canvas, center, checkbox, column, container, image as iced_image, mouse_area, opaque,
+    pick_list, progress_bar, row, rule, scrollable, text, text_input, Space,
 };
 use iced::{Alignment, Color, Element, Length, Padding, Size, Task, Theme};
 use std::collections::HashMap;
@@ -27,10 +26,11 @@ pub fn main() -> iced::Result {
     env_logger::init();
     log::info!("Initializing Print Layout v{}", VERSION);
 
-    iced::application(PrintLayout::title, PrintLayout::update, PrintLayout::view)
+    iced::application(PrintLayout::new, PrintLayout::update, PrintLayout::view)
+        .title(PrintLayout::title)
         .theme(PrintLayout::theme)
         .window_size(Size::new(1400.0, 900.0))
-        .run_with(PrintLayout::new)
+        .run()
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1182,7 +1182,7 @@ impl PrintLayout {
         let stored_settings_area = row![
             text("Printer:").size(14),
             printer_picker,
-            Space::with_width(Length::Fixed(20.0)),
+            Space::new().width(Length::Fixed(20.0)),
             button("New").on_press(Message::NewLayout),
             button("Open").on_press(Message::OpenLayoutClicked),
             recent_button,
@@ -1220,13 +1220,13 @@ impl PrintLayout {
             )
             .on_press(Message::AddImageClicked),
             delete_button,
-            Space::with_width(Length::Fixed(20.0)),
+            Space::new().width(Length::Fixed(20.0)),
             button(text("−").size(18)).on_press(Message::ZoomOut),
             text(&self.zoom_text).size(14),
             button(text("+").size(18)).on_press(Message::ZoomIn),
             button(text("Fit").size(12)).on_press(Message::ZoomToFit),
             button(text("100%").size(12)).on_press(Message::ZoomReset),
-            Space::with_width(Length::Fixed(20.0)),
+            Space::new().width(Length::Fixed(20.0)),
             orientation_btn,
         ]
         .spacing(5)
@@ -1297,22 +1297,23 @@ impl PrintLayout {
                         )
                         .width(Length::Fill),
                     )
-                    .push(Space::with_height(Length::Fixed(8.0)));
+                    .push(Space::new().height(Length::Fixed(8.0)));
 
                 // Borderless option
                 content = content
                     .push(
-                        checkbox("Borderless Printing", self.layout.page.borderless)
+                        checkbox(self.layout.page.borderless)
+                            .label("Borderless Printing")
                             .on_toggle(Message::BorderlessToggled),
                     )
-                    .push(Space::with_height(Length::Fixed(8.0)));
+                    .push(Space::new().height(Length::Fixed(8.0)));
 
                 // CUPS-specific options (if available)
                 if let Some(ref caps) = self.printer_capabilities {
                     content = content
-                        .push(horizontal_rule(1))
+                        .push(rule::horizontal(1))
                         .push(text("Printer Options").size(12))
-                        .push(Space::with_height(Length::Fixed(5.0)));
+                        .push(Space::new().height(Length::Fixed(5.0)));
 
                     // Media Source (InputSlot)
                     if let Some(input_slot) = caps.input_slot() {
@@ -1329,7 +1330,7 @@ impl PrintLayout {
                                     )
                                     .width(Length::Fill),
                                 )
-                                .push(Space::with_height(Length::Fixed(5.0)));
+                                .push(Space::new().height(Length::Fixed(5.0)));
                         }
                     }
 
@@ -1348,7 +1349,7 @@ impl PrintLayout {
                                     )
                                     .width(Length::Fill),
                                 )
-                                .push(Space::with_height(Length::Fixed(5.0)));
+                                .push(Space::new().height(Length::Fixed(5.0)));
                         }
                     }
 
@@ -1370,7 +1371,7 @@ impl PrintLayout {
                                     )
                                     .width(Length::Fill),
                                 )
-                                .push(Space::with_height(Length::Fixed(5.0)));
+                                .push(Space::new().height(Length::Fixed(5.0)));
                         }
                     }
 
@@ -1416,7 +1417,7 @@ impl PrintLayout {
                             )
                             .width(Length::Fill),
                         )
-                        .push(Space::with_height(Length::Fixed(10.0)))
+                        .push(Space::new().height(Length::Fixed(10.0)))
                         .push(text("Print Quality").size(12))
                         .push(
                             pick_list(
@@ -1434,7 +1435,7 @@ impl PrintLayout {
                 // Layout Tab - Margins
                 column![
                     text("Margins (mm)").size(12),
-                    horizontal_rule(1),
+                    rule::horizontal(1),
                     row![
                         text("Top:").width(Length::Fixed(60.0)),
                         text_input("0", &self.margin_top_input)
@@ -1467,9 +1468,9 @@ impl PrintLayout {
                     ]
                     .spacing(5)
                     .align_y(Alignment::Center),
-                    Space::with_height(Length::Fixed(15.0)),
+                    Space::new().height(Length::Fixed(15.0)),
                     text("Page Info").size(12),
-                    horizontal_rule(1),
+                    rule::horizontal(1),
                     text(format!(
                         "Size: {:.1} × {:.1} mm",
                         self.layout.page.width_mm, self.layout.page.height_mm
@@ -1506,7 +1507,7 @@ impl PrintLayout {
                                 .padding(5),
                         ]
                         .spacing(5),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text("Flip").size(12),
                         row![
                             button(text(if flip_h { "↔ H ✓" } else { "↔ H" }).size(10))
@@ -1527,7 +1528,7 @@ impl PrintLayout {
                                 .padding(5),
                         ]
                         .spacing(5),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text("Size (mm)").size(12),
                         row![
                             text("W:").size(10).width(Length::Fixed(20.0)),
@@ -1541,10 +1542,11 @@ impl PrintLayout {
                         ]
                         .spacing(3)
                         .align_y(Alignment::Center),
-                        checkbox("Maintain aspect ratio", self.maintain_aspect_ratio)
+                        checkbox(self.maintain_aspect_ratio)
+                            .label("Maintain aspect ratio")
                             .on_toggle(Message::MaintainAspectRatio)
                             .size(14),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text("Opacity").size(12),
                         row![
                             text_input("100", &self.image_opacity_input)
@@ -1560,7 +1562,7 @@ impl PrintLayout {
                 } else {
                     column![
                         text("No Image Selected").size(12),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text("Select an image from the\nthumbnails below to edit\nits properties.")
                             .size(10),
                     ]
@@ -1572,9 +1574,9 @@ impl PrintLayout {
 
         let settings_panel = column![
             text("Settings").size(14),
-            horizontal_rule(1),
+            rule::horizontal(1),
             tab_buttons,
-            Space::with_height(Length::Fixed(10.0)),
+            Space::new().height(Length::Fixed(10.0)),
             scrollable(settings_content).height(Length::Fill),
         ]
         .spacing(5)
@@ -1672,7 +1674,7 @@ impl PrintLayout {
         let thumbnails_area = column![
             row![
                 text("Thumbnails").size(12),
-                Space::with_width(Length::Fill),
+                Space::new().width(Length::Fill),
                 text(format!("{} image(s)", self.layout.images.len())).size(11),
             ]
             .padding(Padding::from([5, 10])),
@@ -1698,7 +1700,7 @@ impl PrintLayout {
             text_input("1", &self.copies_input)
                 .on_input(Message::CopiesChanged)
                 .width(Length::Fixed(50.0)),
-            Space::with_width(Length::Fixed(20.0)),
+            Space::new().width(Length::Fixed(20.0)),
             print_button,
         ]
         .spacing(10)
@@ -1716,24 +1718,24 @@ impl PrintLayout {
             column![preview_area,]
                 .width(Length::Fill)
                 .height(Length::Fill),
-            vertical_rule(1),
+            rule::vertical(1),
             settings_panel,
         ];
 
         let bottom_section = row![
             container(thumbnails_area).width(Length::Fill),
-            vertical_rule(1),
+            rule::vertical(1),
             print_area,
         ]
         .height(Length::Fixed(120.0));
 
         let main_content = column![
             stored_settings_area,
-            horizontal_rule(1),
+            rule::horizontal(1),
             tools_area,
-            horizontal_rule(1),
+            rule::horizontal(1),
             middle_section,
-            horizontal_rule(1),
+            rule::horizontal(1),
             bottom_section,
         ];
 
@@ -1749,19 +1751,19 @@ impl PrintLayout {
             let modal_content = container(
                 column![
                     text("Recover Unsaved Work?").size(20).color(dark_text),
-                    Space::with_height(Length::Fixed(15.0)),
+                    Space::new().height(Length::Fixed(15.0)),
                     text("An auto-save file was found from a previous session.")
                         .size(14)
                         .color(Color::from_rgb(0.3, 0.3, 0.3)),
                     text("Would you like to recover it?")
                         .size(14)
                         .color(Color::from_rgb(0.3, 0.3, 0.3)),
-                    Space::with_height(Length::Fixed(20.0)),
+                    Space::new().height(Length::Fixed(20.0)),
                     row![
                         button(text("Recover").size(14))
                             .on_press(Message::RecoverAutoSave)
                             .padding(Padding::from([10, 30])),
-                        Space::with_width(Length::Fixed(20.0)),
+                        Space::new().width(Length::Fixed(20.0)),
                         button(text("Discard").size(14))
                             .on_press(Message::DiscardAutoSave)
                             .style(button::secondary)
@@ -1833,9 +1835,9 @@ impl PrintLayout {
 
             // Position the popup near the top-left where the buttons are
             let popup_positioned = container(column![
-                Space::with_height(Length::Fixed(50.0)), // Offset from top
+                Space::new().height(Length::Fixed(50.0)), // Offset from top
                 row![
-                    Space::with_width(Length::Fixed(400.0)), // Offset from left to align with Recent button
+                    Space::new().width(Length::Fixed(400.0)), // Offset from left to align with Recent button
                     popup_content,
                 ],
             ])
@@ -1856,13 +1858,13 @@ impl PrintLayout {
                 let modal_content = container(
                     column![
                         text("PRINTING").size(24).color(dark_text),
-                        Space::with_height(Length::Fixed(15.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("[  ]  Rendering...").size(16).color(dark_text),
-                        Space::with_height(Length::Fixed(20.0)),
+                        Space::new().height(Length::Fixed(20.0)),
                         progress_bar(0.0..=100.0, 30.0)
-                            .width(Length::Fixed(250.0))
-                            .height(Length::Fixed(12.0)),
-                        Space::with_height(Length::Fixed(15.0)),
+                            .length(Length::Fixed(250.0))
+                            .girth(Length::Fixed(12.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("Please wait...")
                             .size(14)
                             .color(Color::from_rgb(0.4, 0.4, 0.4)),
@@ -1898,15 +1900,15 @@ impl PrintLayout {
                 let modal_content = container(
                     column![
                         text("PRINTING").size(24).color(dark_text),
-                        Space::with_height(Length::Fixed(15.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("[>>]  Sending to printer...")
                             .size(16)
                             .color(dark_text),
-                        Space::with_height(Length::Fixed(20.0)),
+                        Space::new().height(Length::Fixed(20.0)),
                         progress_bar(0.0..=100.0, 70.0)
-                            .width(Length::Fixed(250.0))
-                            .height(Length::Fixed(12.0)),
-                        Space::with_height(Length::Fixed(15.0)),
+                            .length(Length::Fixed(250.0))
+                            .girth(Length::Fixed(12.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("Please wait...")
                             .size(14)
                             .color(Color::from_rgb(0.4, 0.4, 0.4)),
@@ -1942,15 +1944,15 @@ impl PrintLayout {
                 let modal_content = container(
                     column![
                         text("[OK]").size(36).color(Color::from_rgb(0.2, 0.7, 0.3)),
-                        Space::with_height(Length::Fixed(15.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("Print Job Sent Successfully!")
                             .size(18)
                             .color(dark_text),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text(format!("Job ID: {}", job_id))
                             .size(13)
                             .color(Color::from_rgb(0.4, 0.4, 0.4)),
-                        Space::with_height(Length::Fixed(20.0)),
+                        Space::new().height(Length::Fixed(20.0)),
                         button(text("OK").size(14))
                             .on_press(Message::DismissPrintStatus)
                             .padding(Padding::from([10, 40])),
@@ -1986,11 +1988,11 @@ impl PrintLayout {
                 let modal_content = container(
                     column![
                         text("[!!]").size(36).color(Color::from_rgb(0.9, 0.3, 0.3)),
-                        Space::with_height(Length::Fixed(15.0)),
+                        Space::new().height(Length::Fixed(15.0)),
                         text("Print Job Failed").size(18).color(dark_text),
-                        Space::with_height(Length::Fixed(10.0)),
+                        Space::new().height(Length::Fixed(10.0)),
                         text(error).size(13).color(Color::from_rgb(0.5, 0.3, 0.3)),
-                        Space::with_height(Length::Fixed(20.0)),
+                        Space::new().height(Length::Fixed(20.0)),
                         button(text("OK").size(14))
                             .on_press(Message::DismissPrintStatus)
                             .padding(Padding::from([10, 40])),
@@ -2045,6 +2047,6 @@ impl PrintLayout {
     }
 
     fn theme(&self) -> Theme {
-        Theme::default()
+        Theme::Light
     }
 }

@@ -9,7 +9,7 @@ The application is designed to be lightweight, performant, and independent of an
 ### Core Technologies
 
 *   **Programming Language:** Rust
-*   **GUI Toolkit:** Iced 0.13.1 (`iced` crate) - cross-desktop, runs on Wayland and X11
+*   **GUI Toolkit:** Iced 0.14 (`iced` crate) - cross-desktop, runs on Wayland and X11
 *   **Image Manipulation:** `image` crate (PNG, JPEG, GIF, BMP, WebP, TIFF support; rotation, flip, opacity transforms)
 *   **Printing System:** CUPS (via `lp`/`lpstat` subprocess commands for portability)
 *   **Serialization:** `serde` and `serde_json` for saving/loading layouts and preferences
@@ -36,7 +36,7 @@ The project uses the standard Rust toolchain (Cargo).
 
 ### Prerequisites
 
-*   Rust 1.70+ (install via [rustup](https://rustup.rs/))
+*   Rust 1.88+ (install via [rustup](https://rustup.rs/))
 *   CUPS installed and running (for printing)
 *   Linux with X11 or Wayland display server
 

@@ -7,7 +7,7 @@ License:        Apache-2.0
 URL:            https://github.com/ChristopherHardiman/PrintLayout
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 
-BuildRequires:  rust >= 1.75
+BuildRequires:  rust >= 1.88
 BuildRequires:  cargo
 BuildRequires:  cups-devel
 BuildRequires:  libxkbcommon-devel
